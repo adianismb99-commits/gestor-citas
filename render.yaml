@@ -1,4 +1,4 @@
-@"
+@'
 services:
   # Servicio web principal
   - type: web
@@ -25,4 +25,4 @@ services:
         generateValue: true
       - key: PYTHON_VERSION
         value: 3.11.0
-"@ | Out-File -Encoding utf8 render.yaml
+'@ | Out-File -Encoding utf8 render.yaml
