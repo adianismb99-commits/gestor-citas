@@ -48,9 +48,22 @@ def reservar_cita_individual(cliente):
             # Esperar a que se abra la nueva ventana
             time.sleep(5)
             
-            # Obtener todas las páginas (ventanas)
-            paginas = navegador.pages
-            log(f"   📊 Ventanas abiertas: {len(paginas)}")
+            # Obtener todas las páginas (ventanas) de forma compatible
+            log("📊 Obteniendo páginas del navegador...")
+            try:
+                paginas = navegador.context.pages
+                log(f"   ✅ Páginas obtenidas con context.pages: {len(paginas)}")
+            except AttributeError:
+                try:
+                    paginas = navegador.contexts[0].pages
+                    log(f"   ✅ Páginas obtenidas con contexts[0].pages: {len(paginas)}")
+                except:
+                    log("   ⚠️ Usando fallback manual...")
+                    paginas = []
+                    for context in navegador.contexts:
+                        paginas.extend(context.pages)
+                    log(f"   ✅ Páginas obtenidas manualmente: {len(paginas)}")
+
             if len(paginas) > 1:
                 pagina = paginas[-1]
                 log("   ✅ Cambiado a la nueva ventana")
@@ -83,8 +96,6 @@ def reservar_cita_individual(cliente):
             horarios = pagina.query_selector_all("text=/[0-9]:[0-9]{2}/")
             if len(horarios) == 0:
                 horarios = pagina.query_selector_all("text=/8:[0-9]{2}/")
-            if len(horarios) == 0:
-                horarios = pagina.query_selector_all("text=/9:[0-9]{2}/")
             
             if len(horarios) == 0:
                 log("❌ No hay citas disponibles")
@@ -105,8 +116,6 @@ def reservar_cita_individual(cliente):
             if len(inputs) >= 1:
                 inputs[0].fill(cliente.pasaporte)
                 log(f"   ✅ Pasaporte: {cliente.pasaporte}")
-            else:
-                log("   ⚠️ No se encontró campo de pasaporte")
             
             password_input = pagina.query_selector("input[type='password']")
             if password_input:
@@ -115,8 +124,6 @@ def reservar_cita_individual(cliente):
             elif len(inputs) >= 2:
                 inputs[1].fill(cliente.contrasena_cita)
                 log("   ✅ Contraseña ingresada (como texto)")
-            else:
-                log("   ⚠️ No se encontró campo de contraseña")
             
             try:
                 confirmar = pagina.wait_for_selector("text=Confirmar", timeout=5000)
@@ -138,8 +145,8 @@ def reservar_cita_individual(cliente):
                 log("✅ Confirmación encontrada")
                 
                 fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
-                archivo = f"comprobantes/cita_{cliente.pasaporte}_{fecha}.png"
-                os.makedirs("comprobantes", exist_ok=True)
+                archivo = f"static/cita_{cliente.pasaporte}_{fecha}.png"
+                os.makedirs("static", exist_ok=True)
                 pagina.screenshot(path=archivo)
                 
                 cliente.cita_reservada = True
@@ -160,8 +167,10 @@ def reservar_cita_individual(cliente):
         except Exception as e:
             log(f"❌ Error con {cliente.nombre}: {e}")
             try:
-                pagina.screenshot(path=f"error_{cliente.pasaporte}.png")
-                log(f"📸 Captura de error guardada: error_{cliente.pasaporte}.png")
+                os.makedirs("static", exist_ok=True)
+                archivo_error = f"static/error_{cliente.pasaporte}.png"
+                pagina.screenshot(path=archivo_error)
+                log(f"📸 Captura de error guardada: {archivo_error}")
             except:
                 pass
             try:
