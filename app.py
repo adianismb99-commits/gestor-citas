@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from models import db, Usuario, Cliente, Dispositivo, Configuracion, Historial
 from datetime import datetime, timedelta
@@ -114,7 +114,7 @@ def dispositivo_es_confiable(usuario_id, device_id):
     return True
 
 # ========================================
-# RUTAS
+# RUTAS PRINCIPALES
 # ========================================
 
 @app.route('/')
@@ -169,15 +169,15 @@ def login():
             flash('Usuario o contraseña incorrectos')
             return redirect(url_for('login'))
         
-        # Verificar si el dispositivo es confiable
-        if dispositivo_es_confiable(usuario.id, device_id_actual):
-            # Dispositivo confiable → iniciar sesión directamente
-            login_user(usuario)
-            actualizar_dispositivo(usuario.id, device_id_actual)
-            return redirect(url_for('dashboard'))
         # 🔥 MODO PRUEBA - Saltar 2FA si el usuario se llama "admin"
         if username == "admin":
             login_user(usuario)
+            return redirect(url_for('dashboard'))
+        
+        # Verificar si el dispositivo es confiable
+        if dispositivo_es_confiable(usuario.id, device_id_actual):
+            login_user(usuario)
+            actualizar_dispositivo(usuario.id, device_id_actual)
             return redirect(url_for('dashboard'))
         
         # Dispositivo no confiable → pedir 2FA
@@ -186,7 +186,6 @@ def login():
         usuario.codigo_2fa_expiracion = datetime.now() + timedelta(minutes=5)
         db.session.commit()
         
-        # Enviar código por email
         enviar_codigo_por_email(usuario.email, codigo)
         
         session['user_id_2fa'] = usuario.id
@@ -223,23 +222,20 @@ def verificar_2fa():
             flash('Código incorrecto')
             return redirect(url_for('verificar_2fa'))
         
-        # ✅ Código correcto
         usuario.codigo_2fa = None
         usuario.codigo_2fa_expiracion = None
         db.session.commit()
         
-        # Crear dispositivo confiable
         device_id = generar_device_id()
         registrar_dispositivo(usuario.id, device_id)
         
-        # Iniciar sesión
         login_user(usuario)
         
         response = redirect(url_for('dashboard'))
         response.set_cookie(
             'device_id',
             device_id,
-            max_age=60*60*24*30,  # 30 días
+            max_age=60*60*24*30,
             httponly=True,
             samesite='Lax'
         )
@@ -284,7 +280,6 @@ def dashboard():
     clientes = Cliente.query.filter_by(usuario_id=current_user.id).all()
     config = Configuracion.query.filter_by(usuario_id=current_user.id).first()
     
-    # Estadísticas
     total = len(clientes)
     reservadas = len([c for c in clientes if c.cita_reservada])
     pendientes = total - reservadas
@@ -358,7 +353,6 @@ def configuracion():
         flash('✅ Configuración guardada correctamente')
         return redirect(url_for('dashboard'))
     
-    # Preparar días seleccionados
     dias_seleccionados = config.dias_semana.split(',') if config and config.dias_semana else []
     dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
     
@@ -383,10 +377,8 @@ def agendar_ahora():
             'message': 'No tienes clientes pendientes'
         })
     
-    # Guardar el ID del usuario antes de iniciar el hilo
     usuario_id = current_user.id
     
-    # Ejecutar en hilo separado
     def ejecutar():
         with app.app_context():
             reservar_citas_para_usuario(usuario_id)
@@ -398,6 +390,50 @@ def agendar_ahora():
         'success': True,
         'message': f'🚀 Iniciando agendamiento para {len(clientes)} clientes'
     })
+
+# ========================================
+# RUTAS PARA CRON-JOB.ORG
+# ========================================
+
+@app.route('/ping', methods=['GET'])
+def ping():
+    """Endpoint simple para verificar que la app está viva"""
+    return "pong", 200
+
+@app.route('/agendar_cron', methods=['POST', 'GET'])
+def agendar_cron():
+    """Endpoint para cron-job.org - ejecuta agendamiento en segundo plano y responde rápido"""
+    from script_agendar import reservar_citas_para_usuario
+    
+    def ejecutar_agendamiento():
+        with app.app_context():
+            print("🕒 Iniciando agendamiento desde cron-job.org...")
+            usuarios = Usuario.query.all()
+            total_procesados = 0
+            
+            for usuario in usuarios:
+                clientes_pendientes = Cliente.query.filter_by(
+                    usuario_id=usuario.id,
+                    cita_reservada=False
+                ).count()
+                
+                if clientes_pendientes > 0:
+                    print(f"🔄 Procesando usuario: {usuario.username} ({clientes_pendientes} clientes)")
+                    reservar_citas_para_usuario(usuario.id)
+                    total_procesados += clientes_pendientes
+                else:
+                    print(f"⏭️ Usuario {usuario.username} sin clientes pendientes")
+            
+            print(f"✅ Agendamiento completado. {total_procesados} clientes procesados.")
+    
+    # Iniciar en segundo plano
+    hilo = threading.Thread(target=ejecutar_agendamiento)
+    hilo.start()
+    
+    # Responder inmediatamente con "OK"
+    respuesta = make_response("OK", 200)
+    respuesta.headers['Content-Type'] = 'text/plain'
+    return respuesta
 
 # ========================================
 # CREAR BASE DE DATOS
