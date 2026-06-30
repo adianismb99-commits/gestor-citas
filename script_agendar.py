@@ -7,18 +7,20 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
-# Importar logger
-try:
-    from logger import log_info, log_success, log_warning, log_error, finalizar_logs, limpiar_logs
-    LOGGER_OK = True
-except:
-    LOGGER_OK = False
-    print("⚠️ Logger no disponible")
-
 def log(mensaje):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {mensaje}")
     sys.stdout.flush()
+
+# ========================================
+# IMPORTAR LOGGER DESDE APP.PY
+# ========================================
+try:
+    from app import log_info, log_success, log_warning, log_error, finalizar_logs, limpiar_logs
+    LOGGER_OK = True
+except:
+    LOGGER_OK = False
+    print("⚠️ Logger no disponible")
 
 def capturar(driver, nombre):
     try:
@@ -52,7 +54,7 @@ def esperar_y_clickear(driver, selectores, nombre="elemento", paso=None):
 def esperar_texto(driver, texto, paso=None):
     log(f"⏳ Esperando texto: '{texto}'...")
     if LOGGER_OK:
-        log_info(f"Esperando texto: '{texto}'", paso)
+        log_info(f"Esperando: '{texto}'", paso)
     while texto not in driver.page_source:
         time.sleep(1)
     log(f"✅ Texto encontrado: '{texto}'")
@@ -92,7 +94,6 @@ def reservar_cita(cliente):
     log(f"🚀 Iniciando reserva para {cliente['nombre']}")
     if LOGGER_OK:
         log_info(f"Iniciando reserva para {cliente['nombre']}")
-        limpiar_logs()
     
     options = Options()
     options.add_argument('--no-sandbox')
@@ -117,9 +118,9 @@ def reservar_cita(cliente):
     paso_actual = 1
     
     try:
-        # PASO 1: Cargar página
+        # PASO 1
         if LOGGER_OK:
-            log_info("📌 PASO 1: Cargando página principal...", paso_actual)
+            log_info("📌 PASO 1: Cargando página...", paso_actual)
         url = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
         driver.get(url)
         esperar_texto(driver, "Servicios consulares", paso_actual)
@@ -130,7 +131,7 @@ def reservar_cita(cliente):
         if verificar_block_cloudflare(driver):
             log("❌ CLOUDFLARE BLOQUEA")
             if LOGGER_OK:
-                log_error("Cloudflare bloquea el acceso", paso_actual)
+                log_error("Cloudflare bloquea", paso_actual)
             resultado["motivo"] = "cloudflare_block"
             capturar(driver, "cloudflare_block")
             driver.quit()
@@ -140,11 +141,8 @@ def reservar_cita(cliente):
         
         # PASO 2: Cookies
         if LOGGER_OK:
-            log_info("📌 PASO 2: Aceptando cookies...", paso_actual)
-        selectores_cookies = [
-            "//input[@value='Aceptar']",
-            "//button[contains(text(), 'Aceptar')]",
-        ]
+            log_info("📌 PASO 2: Cookies...", paso_actual)
+        selectores_cookies = ["//input[@value='Aceptar']", "//button[contains(text(), 'Aceptar')]"]
         esperar_y_clickear(driver, selectores_cookies, "cookies", paso_actual)
         if LOGGER_OK:
             log_success("✅ Cookies aceptadas", paso_actual)
@@ -152,58 +150,54 @@ def reservar_cita(cliente):
         
         # PASO 3: RFX
         if LOGGER_OK:
-            log_info("📌 PASO 3: Buscando enlace RFX...", paso_actual)
+            log_info("📌 PASO 3: RFX...", paso_actual)
         selectores_rfx = [
             "//a[contains(text(), 'Reservar cita de visados RFX')]",
             "//a[contains(@href, 'citaconsular.es')]",
         ]
         esperar_y_clickear(driver, selectores_rfx, "RFX", paso_actual)
         if LOGGER_OK:
-            log_success("✅ Enlace RFX encontrado", paso_actual)
+            log_success("✅ RFX encontrado", paso_actual)
         paso_actual += 1
         
-        # PASO 4: Nueva ventana + Alerta
+        # PASO 4: Nueva ventana
         if LOGGER_OK:
-            log_info("📌 PASO 4: Nueva ventana y alerta...", paso_actual)
+            log_info("📌 PASO 4: Nueva ventana...", paso_actual)
         while len(driver.window_handles) < 2:
             time.sleep(1)
         driver.switch_to.window(driver.window_handles[-1])
         if LOGGER_OK:
-            log_success("✅ Nueva ventana abierta", paso_actual)
+            log_success("✅ Nueva ventana", paso_actual)
         
-        if LOGGER_OK:
-            log_info("⏳ Esperando alerta Welcome/Bienvenido...", paso_actual)
-        while True:
-            try:
-                alerta = driver.switch_to.alert
-                alerta.accept()
-                if LOGGER_OK:
-                    log_success("✅ Alerta aceptada", paso_actual)
-                break
-            except:
-                time.sleep(1)
+        try:
+            alerta = driver.switch_to.alert
+            alerta.accept()
+            if LOGGER_OK:
+                log_success("✅ Alerta aceptada", paso_actual)
+        except:
+            pass
         
         while "citaconsular.es" not in driver.current_url:
             time.sleep(1)
         if LOGGER_OK:
-            log_success(f"✅ URL cargada", paso_actual)
+            log_success("✅ URL cargada", paso_actual)
         paso_actual += 1
         
         # PASO 5: Continuar
         if LOGGER_OK:
-            log_info("📌 PASO 5: Buscando Continuar...", paso_actual)
+            log_info("📌 PASO 5: Continuar...", paso_actual)
         selectores_continuar = [
             "//button[contains(text(), 'Continuar')]",
             "//*[contains(@class, 'clsDivContinueButton')]",
         ]
         esperar_y_clickear(driver, selectores_continuar, "Continuar", paso_actual)
         if LOGGER_OK:
-            log_success("✅ Click en Continuar", paso_actual)
+            log_success("✅ Continuar click", paso_actual)
         paso_actual += 1
         
         # PASO 6: Horarios
         if LOGGER_OK:
-            log_info("📌 PASO 6: Buscando horarios...", paso_actual)
+            log_info("📌 PASO 6: Horarios...", paso_actual)
         esperar_requirejs(driver, paso_actual)
         time.sleep(5)
         
@@ -233,23 +227,23 @@ def reservar_cita(cliente):
         if len(horarios) == 0:
             log("❌ No hay horarios")
             if LOGGER_OK:
-                log_warning("No hay horarios disponibles", paso_actual)
+                log_warning("No hay horarios", paso_actual)
             resultado["motivo"] = "no_hay_horarios"
             capturar(driver, "no_hay_horarios")
             driver.quit()
             if LOGGER_OK:
-                finalizar_logs("No hay horarios disponibles")
+                finalizar_logs("No hay horarios")
             return resultado
         
         log(f"✅ Horarios: {len(horarios)}")
         if LOGGER_OK:
-            log_success(f"Horarios encontrados: {len(horarios)}", paso_actual)
+            log_success(f"Horarios: {len(horarios)}", paso_actual)
         horarios[0].click()
         paso_actual += 1
         
         # PASO 7: Datos
         if LOGGER_OK:
-            log_info("📌 PASO 7: Rellenando datos...", paso_actual)
+            log_info("📌 PASO 7: Datos...", paso_actual)
         
         inputs = []
         while len(inputs) == 0:
@@ -269,31 +263,31 @@ def reservar_cita(cliente):
             campo_pasaporte.send_keys(cliente["pasaporte"])
             log(f"✅ Pasaporte: {cliente['pasaporte']}")
             if LOGGER_OK:
-                log_success(f"Pasaporte ingresado", paso_actual)
+                log_success("Pasaporte ingresado", paso_actual)
         
         campo_password = driver.find_element(By.XPATH, "//input[@type='password']")
         if campo_password:
             campo_password.send_keys(cliente["contrasena"])
-            log("✅ Contraseña ingresada")
+            log("✅ Contraseña")
             if LOGGER_OK:
                 log_success("Contraseña ingresada", paso_actual)
         paso_actual += 1
         
         # PASO 8: Confirmar
         if LOGGER_OK:
-            log_info("📌 PASO 8: Confirmando...", paso_actual)
+            log_info("📌 PASO 8: Confirmar...", paso_actual)
         selectores_confirmar = [
             "//button[contains(text(), 'Confirmar')]",
             "//input[@value='Confirmar']",
         ]
         esperar_y_clickear(driver, selectores_confirmar, "Confirmar", paso_actual)
         if LOGGER_OK:
-            log_success("✅ Confirmar click", paso_actual)
+            log_success("✅ Confirmar", paso_actual)
         paso_actual += 1
         
         # PASO 9: Resultado
         if LOGGER_OK:
-            log_info("📌 PASO 9: Verificando resultado...", paso_actual)
+            log_info("📌 PASO 9: Resultado...", paso_actual)
         for _ in range(30):
             if "Su reserva se ha realizado con éxito" in driver.page_source:
                 log("🎉 CITA CONFIRMADA!")
@@ -309,23 +303,23 @@ def reservar_cita(cliente):
             if "No hay" in driver.page_source and "horas" in driver.page_source:
                 log("❌ No hay citas")
                 if LOGGER_OK:
-                    log_warning("No hay citas disponibles", paso_actual)
+                    log_warning("No hay citas", paso_actual)
                 resultado["motivo"] = "no_hay_citas"
                 capturar(driver, "no_hay_citas")
                 driver.quit()
                 if LOGGER_OK:
-                    finalizar_logs("No hay citas disponibles")
+                    finalizar_logs("No hay citas")
                 return resultado
             time.sleep(1)
         
         log("❌ No se confirmó")
         if LOGGER_OK:
-            log_error("No se encontró confirmación", paso_actual)
+            log_error("No se confirmó", paso_actual)
         resultado["motivo"] = "no_confirmacion"
         capturar(driver, "no_confirmacion")
         driver.quit()
         if LOGGER_OK:
-            finalizar_logs("No se confirmó la cita")
+            finalizar_logs("No se confirmó")
         return resultado
         
     except Exception as e:

@@ -10,17 +10,9 @@ import hashlib
 import threading
 import time
 import os
-from dotenv import load_dotenv
-import sys
 import json
-
-# Importar logger
-try:
-    from logger import leer_logs, limpiar_logs
-    LOGGER_DISPONIBLE = True
-except ImportError:
-    LOGGER_DISPONIBLE = False
-    print("⚠️ logger.py no encontrado. Los logs en tiempo real no estarán disponibles.")
+import sys
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -35,25 +27,90 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-@login_manager.user_loader
-def load_user(user_id):
-    return Usuario.query.get(int(user_id))
+# ========================================
+# LOGGER INTEGRADO (sin archivo externo)
+# ========================================
+
+LOG_FILE = "logs_actuales.json"
+
+def iniciar_logs():
+    log_data = {
+        "inicio": datetime.now().isoformat(),
+        "pasos": [],
+        "finalizado": False,
+        "resultado": ""
+    }
+    guardar_logs(log_data)
+    return log_data
+
+def guardar_logs(log_data):
+    try:
+        with open(LOG_FILE, "w") as f:
+            json.dump(log_data, f, indent=2)
+    except:
+        pass
+
+def leer_logs():
+    try:
+        with open(LOG_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return None
+
+def agregar_paso(mensaje, tipo="info", paso_numero=None):
+    logs = leer_logs()
+    if not logs:
+        logs = iniciar_logs()
+    
+    paso = {
+        "mensaje": mensaje,
+        "tipo": tipo,
+        "timestamp": datetime.now().isoformat(),
+        "paso": paso_numero
+    }
+    logs["pasos"].append(paso)
+    guardar_logs(logs)
+    
+    # También imprimir en consola para Render
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {mensaje}")
+    sys.stdout.flush()
+
+def log_info(mensaje, paso=None):
+    agregar_paso(mensaje, "info", paso)
+
+def log_success(mensaje, paso=None):
+    agregar_paso(mensaje, "success", paso)
+
+def log_warning(mensaje, paso=None):
+    agregar_paso(mensaje, "warning", paso)
+
+def log_error(mensaje, paso=None):
+    agregar_paso(mensaje, "error", paso)
+
+def finalizar_logs(resultado):
+    logs = leer_logs()
+    if logs:
+        logs["finalizado"] = True
+        logs["resultado"] = resultado
+        logs["fin"] = datetime.now().isoformat()
+        guardar_logs(logs)
+
+def limpiar_logs():
+    if os.path.exists(LOG_FILE):
+        os.remove(LOG_FILE)
 
 # ========================================
 # FUNCIONES AUXILIARES
 # ========================================
 
 def generar_codigo_2fa():
-    """Genera un código de 6 dígitos aleatorio"""
     return ''.join(random.choices(string.digits, k=6))
 
 def generar_device_id():
-    """Genera un ID único para el dispositivo"""
     datos = f"{datetime.now()}-{uuid.uuid4()}"
     return hashlib.md5(datos.encode()).hexdigest()
 
 def enviar_codigo_por_email(email_destino, codigo):
-    """Envía el código 2FA por correo (usando Gmail SMTP)"""
     try:
         import smtplib
         from email.mime.text import MIMEText
@@ -84,7 +141,6 @@ def enviar_codigo_por_email(email_destino, codigo):
         return False
 
 def registrar_dispositivo(usuario_id, device_id):
-    """Registra un nuevo dispositivo confiable"""
     expira = datetime.now() + timedelta(days=30)
     dispositivo = Dispositivo(
         usuario_id=usuario_id,
@@ -96,7 +152,6 @@ def registrar_dispositivo(usuario_id, device_id):
     return dispositivo
 
 def actualizar_dispositivo(usuario_id, device_id):
-    """Actualiza el último uso de un dispositivo"""
     dispositivo = Dispositivo.query.filter_by(
         usuario_id=usuario_id,
         device_id=device_id
@@ -106,22 +161,21 @@ def actualizar_dispositivo(usuario_id, device_id):
         db.session.commit()
 
 def dispositivo_es_confiable(usuario_id, device_id):
-    """Verifica si un dispositivo es confiable"""
     if not device_id:
         return False
-    
     dispositivo = Dispositivo.query.filter_by(
         usuario_id=usuario_id,
         device_id=device_id
     ).first()
-    
     if not dispositivo:
         return False
-    
     if dispositivo.expira < datetime.now():
         return False
-    
     return True
+
+@login_manager.user_loader
+def load_user(user_id):
+    return Usuario.query.get(int(user_id))
 
 # ========================================
 # RUTAS PRINCIPALES
@@ -179,18 +233,15 @@ def login():
             flash('Usuario o contraseña incorrectos')
             return redirect(url_for('login'))
         
-        # 🔥 MODO PRUEBA - Saltar 2FA si el usuario se llama "admin"
         if username == "admin":
             login_user(usuario)
             return redirect(url_for('dashboard'))
         
-        # Verificar si el dispositivo es confiable
         if dispositivo_es_confiable(usuario.id, device_id_actual):
             login_user(usuario)
             actualizar_dispositivo(usuario.id, device_id_actual)
             return redirect(url_for('dashboard'))
         
-        # Dispositivo no confiable → pedir 2FA
         codigo = generar_codigo_2fa()
         usuario.codigo_2fa = codigo
         usuario.codigo_2fa_expiracion = datetime.now() + timedelta(minutes=5)
@@ -391,7 +442,11 @@ def agendar_ahora():
     
     usuario_id = current_user.id
     
-    # Ejecutar el script en un proceso separado
+    # Limpiar logs antes de empezar
+    limpiar_logs()
+    log_info(f"🚀 Iniciando agendamiento para usuario {current_user.username}")
+    log_info(f"📋 Clientes a procesar: {len(clientes)}")
+    
     try:
         subprocess.Popen(
             [sys.executable, 'run_agendamiento.py', f'--usuario_id={usuario_id}'],
@@ -399,9 +454,9 @@ def agendar_ahora():
             stderr=subprocess.PIPE,
             cwd=os.path.dirname(__file__)
         )
-        print(f"✅ Proceso iniciado para usuario {usuario_id}")
+        log_success(f"✅ Proceso iniciado para {len(clientes)} clientes")
     except Exception as e:
-        print(f"❌ Error al iniciar proceso: {e}")
+        log_error(f"❌ Error al iniciar: {e}")
         return jsonify({
             'success': False,
             'message': f'Error al iniciar: {str(e)}'
@@ -412,18 +467,12 @@ def agendar_ahora():
         'message': f'🚀 Iniciando agendamiento para {len(clientes)} clientes en segundo plano'
     })
 
-# ========================================
-# RUTAS PARA CRON-JOB.ORG
-# ========================================
-
 @app.route('/ping', methods=['GET'])
 def ping():
-    """Endpoint simple para verificar que la app está viva"""
     return "pong", 200
 
 @app.route('/agendar_cron', methods=['POST', 'GET'])
 def agendar_cron():
-    """Endpoint para cron-job.org - ejecuta agendamiento en proceso separado"""
     import subprocess
     import sys
     import os
@@ -431,6 +480,9 @@ def agendar_cron():
     
     def ejecutar_en_proceso_separado():
         try:
+            limpiar_logs()
+            log_info("🕒 Iniciando agendamiento desde cron-job.org...")
+            
             script = f'''
 import sys
 sys.path.append(r'{os.path.dirname(__file__)}')
@@ -457,9 +509,9 @@ with app.app_context():
                 stderr=subprocess.PIPE,
                 cwd=os.path.dirname(__file__)
             )
-            print("✅ Proceso de agendamiento iniciado desde cron")
+            log_success("✅ Proceso de agendamiento iniciado desde cron")
         except Exception as e:
-            print(f"❌ Error al iniciar proceso: {e}")
+            log_error(f"❌ Error al iniciar proceso: {e}")
     
     hilo = threading.Thread(target=ejecutar_en_proceso_separado)
     hilo.start()
@@ -468,29 +520,14 @@ with app.app_context():
     respuesta.headers['Content-Type'] = 'text/plain'
     return respuesta
 
-# ========================================
-# RUTAS PARA LOGS EN TIEMPO REAL
-# ========================================
-
 @app.route('/logs_html')
 @login_required
 def ver_logs_html():
-    """Muestra los logs en una página HTML"""
-    if not LOGGER_DISPONIBLE:
-        return "❌ Logger no disponible. Ejecuta 'python logger.py' primero.", 500
     return render_template('logs.html')
 
 @app.route('/logs')
 @login_required
 def ver_logs():
-    """Devuelve los logs en formato JSON"""
-    if not LOGGER_DISPONIBLE:
-        return jsonify({
-            "pasos": [{"mensaje": "Logger no disponible", "tipo": "error"}],
-            "finalizado": True,
-            "resultado": "Error"
-        })
-    
     try:
         logs = leer_logs()
         if not logs:
@@ -502,7 +539,7 @@ def ver_logs():
         return jsonify(logs)
     except Exception as e:
         return jsonify({
-            "pasos": [{"mensaje": f"Error al leer logs: {str(e)}", "tipo": "error"}],
+            "pasos": [{"mensaje": f"Error: {str(e)}", "tipo": "error"}],
             "finalizado": True,
             "resultado": "Error"
         })
@@ -510,11 +547,8 @@ def ver_logs():
 @app.route('/limpiar_logs', methods=['POST'])
 @login_required
 def limpiar_logs_endpoint():
-    """Limpia los logs"""
-    if LOGGER_DISPONIBLE:
-        limpiar_logs()
-        return jsonify({"success": True, "message": "Logs limpiados"})
-    return jsonify({"success": False, "message": "Logger no disponible"})
+    limpiar_logs()
+    return jsonify({"success": True, "message": "Logs limpiados"})
 
 # ========================================
 # CREAR BASE DE DATOS
