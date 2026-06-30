@@ -11,6 +11,40 @@ def log(mensaje):
     print(mensaje)
     sys.stdout.flush()
 
+def aceptar_cookies(pagina):
+    """Acepta el banner de cookies si aparece"""
+    log("🍪 Buscando banner de cookies...")
+    
+    # Lista de selectores comunes para botones de cookies
+    selectores = [
+        "text=Aceptar",
+        "button:has-text('Aceptar')",
+        "text=Entendido",
+        "button:has-text('Entendido')",
+        "text=Acepto",
+        "button:has-text('Acepto')",
+        "#cookie-accept",
+        ".cookie-accept",
+        "button[class*='cookie']",
+        "a[class*='cookie']",
+        "button:has-text('Aceptar todas')",
+        "button:has-text('Aceptar cookies')"
+    ]
+    
+    for selector in selectores:
+        try:
+            boton = pagina.wait_for_selector(selector, timeout=2000)
+            if boton:
+                boton.click()
+                log(f"   ✅ Cookies aceptadas con selector: {selector}")
+                time.sleep(1)
+                return True
+        except:
+            continue
+    
+    log("   ⚠️ No se encontró banner de cookies, continuando...")
+    return False
+
 def reservar_cita_individual(cliente):
     """Reserva una cita para un cliente individual usando Playwright en modo headless"""
     
@@ -32,6 +66,12 @@ def reservar_cita_individual(cliente):
             
             log("   ✅ Página cargada")
             
+            # ==========================================
+            # ✅ ACEPTAR COOKIES ANTES DE SEGUIR
+            # ==========================================
+            aceptar_cookies(pagina)
+            # ==========================================
+            
             # Buscar el enlace RFX
             log("📌 Buscando enlace 'Reservar cita de visados RFX'...")
             
@@ -45,31 +85,56 @@ def reservar_cita_individual(cliente):
                 enlace.click()
                 log("   ✅ Click en enlace por texto parcial")
             
-            # Esperar a que se abra la nueva ventana
-            time.sleep(5)
+            # ==========================================
+            # ✅ ESPERAR NUEVA VENTANA O CAMBIO DE URL
+            # ==========================================
+            log("📊 Esperando nueva página o cambio de URL...")
             
-            # Obtener todas las páginas (ventanas) de forma compatible
-            log("📊 Obteniendo páginas del navegador...")
+            # Método 1: Esperar a que la URL cambie (si es la misma página)
+            url_actual = pagina.url
             try:
-                paginas = navegador.context.pages
-                log(f"   ✅ Páginas obtenidas con context.pages: {len(paginas)}")
-            except AttributeError:
-                try:
-                    paginas = navegador.contexts[0].pages
-                    log(f"   ✅ Páginas obtenidas con contexts[0].pages: {len(paginas)}")
-                except:
-                    log("   ⚠️ Usando fallback manual...")
-                    paginas = []
-                    for context in navegador.contexts:
-                        paginas.extend(context.pages)
-                    log(f"   ✅ Páginas obtenidas manualmente: {len(paginas)}")
-
-            if len(paginas) > 1:
-                pagina = paginas[-1]
-                log("   ✅ Cambiado a la nueva ventana")
-            else:
-                log("   ⚠️ No se detectó nueva ventana, continuando en la misma...")
+                pagina.wait_for_url(lambda url: "citaconsular" in url, timeout=15000)
+                log("   ✅ URL cambió a citaconsular")
+            except:
+                log("   ⚠️ La URL no cambió, intentando detectar nueva página...")
             
+            # Método 2: Esperar a que haya más de 1 página
+            time.sleep(3)
+            try:
+                paginas = navegador.contexts[0].pages
+                log(f"   📊 Páginas actuales: {len(paginas)}")
+                
+                if len(paginas) > 1:
+                    pagina = paginas[-1]
+                    log("   ✅ Cambiado a la nueva ventana")
+                else:
+                    # Método 3: Reintentar clic con expect_page
+                    log("   ⏳ Usando expect_page para detectar nueva ventana...")
+                    try:
+                        with navegador.context.expect_page(timeout=10000) as nueva_pagina_info:
+                            # Reintentar clic en el enlace
+                            enlace = pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=5000)
+                            enlace.click()
+                            log("   🔄 Reintentando clic en enlace RFX...")
+                        pagina = nueva_pagina_info.value
+                        log("   ✅ Nueva página detectada con expect_page")
+                    except:
+                        log("   ❌ No se detectó nueva página")
+                        # Método 4: Navegación directa al href
+                        try:
+                            href = enlace.get_attribute('href')
+                            if href:
+                                log(f"   🔄 Navegando directamente a: {href}")
+                                pagina.goto(href, timeout=30000)
+                                log("   ✅ Navegación directa exitosa")
+                        except Exception as e2:
+                            log(f"   ❌ Error en navegación directa: {e2}")
+            except Exception as e:
+                log(f"   ⚠️ Error detectando páginas: {e}")
+            
+            # ==========================================
+            # CONTINUAR CON EL PROCESO
+            # ==========================================
             pagina.wait_for_load_state("networkidle", timeout=60000)
             
             # Buscar y hacer clic en "Continuar"
@@ -85,9 +150,12 @@ def reservar_cita_individual(cliente):
                     log("   ✅ Click en Continue")
                 except:
                     log("   ⚠️ No se encontró el botón Continuar, intentando con selector genérico...")
-                    continuar = pagina.wait_for_selector("button:has-text('Continuar')", timeout=10000)
-                    continuar.click()
-                    log("   ✅ Click en Continuar (genérico)")
+                    try:
+                        continuar = pagina.wait_for_selector("button:has-text('Continuar')", timeout=10000)
+                        continuar.click()
+                        log("   ✅ Click en Continuar (genérico)")
+                    except:
+                        log("   ❌ No se encontró el botón Continuar en ninguna forma")
             
             time.sleep(3)
             
@@ -96,6 +164,8 @@ def reservar_cita_individual(cliente):
             horarios = pagina.query_selector_all("text=/[0-9]:[0-9]{2}/")
             if len(horarios) == 0:
                 horarios = pagina.query_selector_all("text=/8:[0-9]{2}/")
+            if len(horarios) == 0:
+                horarios = pagina.query_selector_all("text=/9:[0-9]{2}/")
             
             if len(horarios) == 0:
                 log("❌ No hay citas disponibles")
@@ -116,6 +186,8 @@ def reservar_cita_individual(cliente):
             if len(inputs) >= 1:
                 inputs[0].fill(cliente.pasaporte)
                 log(f"   ✅ Pasaporte: {cliente.pasaporte}")
+            else:
+                log("   ⚠️ No se encontró campo de pasaporte")
             
             password_input = pagina.query_selector("input[type='password']")
             if password_input:
@@ -124,7 +196,10 @@ def reservar_cita_individual(cliente):
             elif len(inputs) >= 2:
                 inputs[1].fill(cliente.contrasena_cita)
                 log("   ✅ Contraseña ingresada (como texto)")
+            else:
+                log("   ⚠️ No se encontró campo de contraseña")
             
+            # Click en Confirmar
             try:
                 confirmar = pagina.wait_for_selector("text=Confirmar", timeout=5000)
                 confirmar.click()
@@ -139,6 +214,7 @@ def reservar_cita_individual(cliente):
             
             time.sleep(3)
             
+            # Verificar confirmación
             log("📌 Verificando confirmación...")
             try:
                 pagina.wait_for_selector("text=Su reserva se ha realizado con éxito", timeout=10000)
