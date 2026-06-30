@@ -11,6 +11,7 @@ import threading
 import time
 import os
 from dotenv import load_dotenv
+import sys
 
 load_dotenv()
 
@@ -364,6 +365,7 @@ def configuracion():
 @app.route('/agendar_ahora', methods=['POST'])
 @login_required
 def agendar_ahora():
+    import sys
     from script_agendar import reservar_citas_para_usuario
     
     clientes = Cliente.query.filter_by(
@@ -381,7 +383,11 @@ def agendar_ahora():
     
     def ejecutar():
         with app.app_context():
+            print("🔄 Iniciando agendamiento en hilo...")
+            sys.stdout.flush()
             reservar_citas_para_usuario(usuario_id)
+            print("🏁 Hilo de agendamiento finalizado")
+            sys.stdout.flush()
     
     hilo = threading.Thread(target=ejecutar)
     hilo.start()
@@ -403,11 +409,13 @@ def ping():
 @app.route('/agendar_cron', methods=['POST', 'GET'])
 def agendar_cron():
     """Endpoint para cron-job.org - ejecuta agendamiento en segundo plano y responde rápido"""
+    import sys
     from script_agendar import reservar_citas_para_usuario
     
     def ejecutar_agendamiento():
         with app.app_context():
             print("🕒 Iniciando agendamiento desde cron-job.org...")
+            sys.stdout.flush()
             usuarios = Usuario.query.all()
             total_procesados = 0
             
@@ -419,18 +427,19 @@ def agendar_cron():
                 
                 if clientes_pendientes > 0:
                     print(f"🔄 Procesando usuario: {usuario.username} ({clientes_pendientes} clientes)")
+                    sys.stdout.flush()
                     reservar_citas_para_usuario(usuario.id)
                     total_procesados += clientes_pendientes
                 else:
                     print(f"⏭️ Usuario {usuario.username} sin clientes pendientes")
+                    sys.stdout.flush()
             
             print(f"✅ Agendamiento completado. {total_procesados} clientes procesados.")
+            sys.stdout.flush()
     
-    # Iniciar en segundo plano
     hilo = threading.Thread(target=ejecutar_agendamiento)
     hilo.start()
     
-    # Responder inmediatamente con "OK"
     respuesta = make_response("OK", 200)
     respuesta.headers['Content-Type'] = 'text/plain'
     return respuesta
