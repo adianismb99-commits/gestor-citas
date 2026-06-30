@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Configuración</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ Configuración de Agendamiento</h1>
+        
+        <form method="POST">
+            <div class="campo">
+                <label>Días de la semana para agendar</label>
+                <div class="dias-grid">
+                    {% for dia in dias_semana %}
+                    <label>
+                        <input type="checkbox" name="dias" value="{{ dia }}"
+                               {% if dia in dias_seleccionados %}checked{% endif %}>
+                        {{ dia|capitalize }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="campo">
+                <label>Hora de inicio</label>
+                <input type="time" name="hora_inicio" 
+                       value="{{ config.hora_inicio if config else '08:00' }}">
+            </div>
+            
+            <div class="campo">
+                <label>Hora de fin</label>
+                <input type="time" name="hora_fin" 
+                       value="{{ config.hora_fin if config else '20:00' }}">
+            </div>
+            
+            <div class="campo">
+                <label>Intervalo entre intentos (minutos)</label>
+                <input type="number" name="intervalo" min="1" max="60" 
+                       value="{{ config.intervalo_minutos if config else 5 }}">
+            </div>
+            
+            <div class="campo">
+                <label>
+                    <input type="checkbox" name="auto_agendar" 
+                           {% if config and config.auto_agendar %}checked{% endif %}>
+                    Activar agendamiento automático
+                </label>
+            </div>
+            
+            <button type="submit" class="btn-primary">Guardar Configuración</button>
+            <a href="{{ url_for('dashboard') }}" class="btn">Volver</a>
+        </form>
+    </div>
+</body>
+</html>

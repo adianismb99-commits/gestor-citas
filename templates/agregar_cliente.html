@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Agregar Cliente</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>➕ Agregar Cliente</h1>
+        
+        <form method="POST">
+            <div class="campo">
+                <label>Nombre completo</label>
+                <input type="text" name="nombre" required>
+            </div>
+            <div class="campo">
+                <label>Número de Pasaporte</label>
+                <input type="text" name="pasaporte" required>
+            </div>
+            <div class="campo">
+                <label>Contraseña de cita</label>
+                <input type="text" name="contrasena" required>
+            </div>
+            <button type="submit" class="btn-primary">Guardar Cliente</button>
+            <a href="{{ url_for('dashboard') }}" class="btn">Cancelar</a>
+        </form>
+    </div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+flask
+flask-login
+flask-sqlalchemy
+gunicorn
+python-dotenv
+bcrypt
+playwright

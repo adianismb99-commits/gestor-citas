@@ -1,0 +1,44 @@
+@"
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Base de datos
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# Archivos grandes
+*.exe
+*.zip
+*.7z
+*.rar
+Driver_Notes/
+
+# Capturas y archivos generados
+comprobantes/
+*.png
+*.jpg
+*.jpeg
+
+# Archivos de entorno
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de log
+*.log
+"@ | Out-File -Encoding utf8 .gitignore

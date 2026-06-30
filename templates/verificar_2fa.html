@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Verificar 2FA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📧</div>
+        <h1>Verificación en Dos Pasos</h1>
+        
+        <p>Hemos enviado un código de 6 dígitos a tu correo:</p>
+        <p><strong>{{ email }}</strong></p>
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash">
+                    {% for message in messages %}
+                        <p>{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <form method="POST">
+            <div class="campo">
+                <label>Código de 6 dígitos</label>
+                <input type="text" name="codigo" maxlength="6" required autofocus>
+            </div>
+            <button type="submit" class="btn-primary">Verificar</button>
+        </form>
+        
+        <p class="text-center">
+            <a href="{{ url_for('reenviar_codigo') }}">📨 Reenviar código</a>
+        </p>
+        
+        <p class="text-muted">
+            ⏳ El código expira en 5 minutos
+        </p>
+    </div>
+</body>
+</html>

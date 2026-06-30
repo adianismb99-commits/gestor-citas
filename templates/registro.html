@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Registro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📝</div>
+        <h1>Crear Cuenta</h1>
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash">
+                    {% for message in messages %}
+                        <p>{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <form method="POST">
+            <div class="campo">
+                <label>Usuario</label>
+                <input type="text" name="username" required>
+            </div>
+            <div class="campo">
+                <label>Email</label>
+                <input type="email" name="email" required>
+            </div>
+            <div class="campo">
+                <label>Contraseña</label>
+                <input type="password" name="password" required>
+            </div>
+            <button type="submit" class="btn-primary">Registrarse</button>
+        </form>
+        
+        <p class="text-center">
+            ¿Ya tienes cuenta? <a href="{{ url_for('login') }}">Inicia Sesión</a>
+        </p>
+    </div>
+</body>
+</html>

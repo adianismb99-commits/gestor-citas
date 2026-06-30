@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Panel de Control</h1>
+            <div class="user-info">
+                <span>👤 {{ current_user.username }}</span>
+                <a href="{{ url_for('logout') }}" class="btn-small">Cerrar Sesión</a>
+            </div>
+        </div>
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash">
+                    {% for message in messages %}
+                        <p>{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <div class="estadisticas">
+            <div class="card">
+                <h3>Total Clientes</h3>
+                <p>{{ total }}</p>
+            </div>
+            <div class="card success">
+                <h3>✅ Reservadas</h3>
+                <p>{{ reservadas }}</p>
+            </div>
+            <div class="card warning">
+                <h3>⏳ Pendientes</h3>
+                <p>{{ pendientes }}</p>
+            </div>
+        </div>
+        
+        <div class="acciones">
+            <a href="{{ url_for('agregar_cliente') }}" class="btn">➕ Agregar Cliente</a>
+            <a href="{{ url_for('configuracion') }}" class="btn btn-secondary">⚙️ Configuración</a>
+            <button onclick="agendarCitas()" class="btn btn-primary">🚀 Agendar Ahora</button>
+        </div>
+        
+        <h2>Mis Clientes</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Pasaporte</th>
+                    <th>Estado</th>
+                    <th>Comprobante</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cliente in clientes %}
+                <tr>
+                    <td>{{ cliente.nombre }}</td>
+                    <td>{{ cliente.pasaporte }}</td>
+                    <td>
+                        {% if cliente.cita_reservada %}
+                            <span class="badge success">✅ Reservada</span>
+                        {% else %}
+                            <span class="badge warning">⏳ Pendiente</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if cliente.comprobante %}
+                            <a href="{{ cliente.comprobante }}" target="_blank">📸 Ver</a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('eliminar_cliente', cliente_id=cliente.id) }}" 
+                           onclick="return confirm('¿Eliminar este cliente?')"
+                           class="btn-danger-small">🗑️</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        function agendarCitas() {
+            if (!confirm('¿Deseas agendar citas para todos tus clientes pendientes?')) return;
+            
+            const btn = document.querySelector('.btn-primary');
+            btn.textContent = '⏳ Procesando...';
+            btn.disabled = true;
+            
+            fetch('/agendar_ahora', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                if (data.success) {
+                    setTimeout(() => location.reload(), 3000);
+                }
+                btn.textContent = '🚀 Agendar Ahora';
+                btn.disabled = false;
+            })
+            .catch(error => {
+                alert('Error al agendar: ' + error);
+                btn.textContent = '🚀 Agendar Ahora';
+                btn.disabled = false;
+            });
+        }
+    </script>
+</body>
+</html>
