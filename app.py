@@ -458,6 +458,11 @@ with app.app_context():
     respuesta = make_response("OK", 200)
     respuesta.headers['Content-Type'] = 'text/plain'
     return respuesta
+@app.route('/logs_html')
+@login_required
+def ver_logs_html():
+    """Muestra los logs en una página HTML"""
+    return render_template('logs.html')
 
 # ========================================
 # CREAR BASE DE DATOS
