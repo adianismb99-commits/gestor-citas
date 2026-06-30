@@ -1,4 +1,3 @@
-@"
 FROM mcr.microsoft.com/playwright/python:v1.40.0-focal
 
 WORKDIR /app
@@ -10,5 +9,11 @@ COPY . .
 
 RUN playwright install
 
-CMD ["python", "cron_agendar.py"]
-"@ | Out-File -Encoding utf8 Dockerfile.cron
+EXPOSE 10000
+
+# Aumentar timeout y crear archivo de configuración
+RUN echo "timeout = 600" > gunicorn.conf.py
+RUN echo "workers = 1" >> gunicorn.conf.py
+RUN echo "threads = 2" >> gunicorn.conf.py
+
+CMD ["gunicorn", "app:app", "--config", "gunicorn.conf.py", "--bind", "0.0.0.0:10000"]

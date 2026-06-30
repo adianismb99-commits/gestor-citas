@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Logs en tiempo real</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .log-container {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Courier New', monospace;
+            padding: 20px;
+            border-radius: 8px;
+            max-height: 600px;
+            overflow-y: auto;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .log-container .info { color: #4fc3f7; }
+        .log-container .success { color: #81c784; }
+        .log-container .warning { color: #ffb74d; }
+        .log-container .error { color: #e57373; }
+        .log-container .paso { color: #ce93d8; font-weight: bold; }
+        .log-container .timestamp { color: #616161; }
+        .log-item {
+            padding: 2px 0;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .log-item:last-child { border-bottom: none; }
+        .log-finalizado {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            text-align: center;
+        }
+        .log-finalizado.exito { border-left: 4px solid #4caf50; }
+        .log-finalizado.error { border-left: 4px solid #f44336; }
+        .log-finalizado.warning { border-left: 4px solid #ff9800; }
+        
+        .log-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .log-status.en-ejecucion { background: #2196f3; color: white; }
+        .log-status.finalizado { background: #4caf50; color: white; }
+        .log-status.error { background: #f44336; color: white; }
+        
+        .refresh-btn {
+            background: #1a3a5c;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        .refresh-btn:hover { background: #0f2a42; }
+        
+        .auto-refresh {
+            display: inline-block;
+            margin-left: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Logs en tiempo real</h1>
+            <div class="user-info">
+                <span>👤 {{ current_user.username }}</span>
+                <a href="{{ url_for('dashboard') }}" class="btn-small">Volver</a>
+                <a href="{{ url_for('logout') }}" class="btn-small">Cerrar Sesión</a>
+            </div>
+        </div>
+        
+        <div class="acciones">
+            <button onclick="cargarLogs()" class="refresh-btn">🔄 Actualizar</button>
+            <button onclick="limpiarLogs()" class="btn btn-danger" style="padding: 8px 20px;">🗑️ Limpiar</button>
+            <label class="auto-refresh">
+                <input type="checkbox" id="autoRefresh" checked onchange="toggleAutoRefresh()"> 
+                Auto-refresh (10s)
+            </label>
+        </div>
+        
+        <div id="logContainer" class="log-container">
+            <div class="log-item">
+                <span class="timestamp">⏳</span>
+                <span class="info">Cargando logs...</span>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let autoRefresh = true;
+        let intervalo = null;
+        
+        function cargarLogs() {
+            fetch('/logs')
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('logContainer');
+                    
+                    if (!data || !data.pasos || data.pasos.length === 0) {
+                        container.innerHTML = `
+                            <div class="log-item">
+                                <span class="timestamp">ℹ️</span>
+                                <span class="info">No hay logs disponibles. Ejecuta el agendamiento.</span>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    let html = '';
+                    
+                    // Mostrar estado
+                    let estado = 'en-ejecucion';
+                    let estadoTexto = '🔄 En ejecución...';
+                    if (data.finalizado) {
+                        if (data.resultado && data.resultado.includes('CITA CONFIRMADA')) {
+                            estado = 'finalizado';
+                            estadoTexto = '✅ ' + data.resultado;
+                        } else if (data.resultado && data.resultado.includes('Error')) {
+                            estado = 'error';
+                            estadoTexto = '❌ ' + data.resultado;
+                        } else {
+                            estado = 'warning';
+                            estadoTexto = '⚠️ ' + (data.resultado || 'Finalizado');
+                        }
+                    }
+                    html += `<div class="log-status ${estado}">${estadoTexto}</div><br><br>`;
+                    
+                    // Mostrar pasos
+                    data.pasos.forEach(paso => {
+                        let clase = paso.tipo || 'info';
+                        let icono = '';
+                        switch(clase) {
+                            case 'success': icono = '✅'; break;
+                            case 'warning': icono = '⚠️'; break;
+                            case 'error': icono = '❌'; break;
+                            default: icono = '📌';
+                        }
+                        let pasoStr = paso.paso ? `<span class="paso">[PASO ${paso.paso}]</span> ` : '';
+                        let timestamp = paso.timestamp ? new Date(paso.timestamp).toLocaleTimeString() : '';
+                        html += `
+                            <div class="log-item">
+                                <span class="timestamp">${timestamp}</span>
+                                ${pasoStr}
+                                <span class="${clase}">${icono} ${paso.mensaje}</span>
+                            </div>
+                        `;
+                    });
+                    
+                    // Si está finalizado, mostrar resumen
+                    if (data.finalizado) {
+                        let claseResumen = data.resultado && data.resultado.includes('CITA CONFIRMADA') ? 'exito' : 'error';
+                        if (data.resultado && data.resultado.includes('No hay')) {
+                            claseResumen = 'warning';
+                        }
+                        html += `
+                            <div class="log-finalizado ${claseResumen}">
+                                <strong>🏁 FINALIZADO</strong> - ${data.resultado || 'Sin resultado'}
+                                ${data.fin ? `<br><small>${new Date(data.fin).toLocaleString()}</small>` : ''}
+                            </div>
+                        `;
+                    }
+                    
+                    container.innerHTML = html;
+                    
+                    // Auto-scroll al final
+                    container.scrollTop = container.scrollHeight;
+                })
+                .catch(error => {
+                    console.error('Error cargando logs:', error);
+                    document.getElementById('logContainer').innerHTML = `
+                        <div class="log-item">
+                            <span class="error">❌ Error al cargar logs: ${error}</span>
+                        </div>
+                    `;
+                });
+        }
+        
+        function limpiarLogs() {
+            if (!confirm('¿Eliminar todos los logs?')) return;
+            fetch('/limpiar_logs', { method: 'POST' })
+                .then(() => cargarLogs());
+        }
+        
+        function toggleAutoRefresh() {
+            autoRefresh = document.getElementById('autoRefresh').checked;
+            if (autoRefresh) {
+                iniciarAutoRefresh();
+            } else {
+                clearInterval(intervalo);
+                intervalo = null;
+            }
+        }
+        
+        function iniciarAutoRefresh() {
+            if (intervalo) clearInterval(intervalo);
+            intervalo = setInterval(cargarLogs, 10000);
+        }
+        
+        // Cargar logs al entrar
+        document.addEventListener('DOMContentLoaded', function() {
+            cargarLogs();
+            if (document.getElementById('autoRefresh').checked) {
+                iniciarAutoRefresh();
+            }
+        });
+    </script>
+</body>
+</html>
