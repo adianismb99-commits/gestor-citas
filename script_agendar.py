@@ -62,7 +62,7 @@ def reservar_cita_individual(cliente):
     with sync_playwright() as p:
         # Usar headless="new" para mejor rendimiento
         navegador = p.chromium.launch(
-            headless="new",
+            headless=True,
             args=['--no-sandbox', '--disable-setuid-sandbox']
         )
         pagina = navegador.new_page()
