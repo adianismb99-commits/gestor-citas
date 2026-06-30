@@ -365,8 +365,9 @@ def configuracion():
 @app.route('/agendar_ahora', methods=['POST'])
 @login_required
 def agendar_ahora():
+    import subprocess
     import sys
-    from script_agendar import reservar_citas_para_usuario
+    import os
     
     clientes = Cliente.query.filter_by(
         usuario_id=current_user.id,
@@ -381,20 +382,25 @@ def agendar_ahora():
     
     usuario_id = current_user.id
     
-    def ejecutar():
-        with app.app_context():
-            print("🔄 Iniciando agendamiento en hilo...")
-            sys.stdout.flush()
-            reservar_citas_para_usuario(usuario_id)
-            print("🏁 Hilo de agendamiento finalizado")
-            sys.stdout.flush()
-    
-    hilo = threading.Thread(target=ejecutar)
-    hilo.start()
+    # Ejecutar el script en un proceso separado
+    try:
+        subprocess.Popen(
+            [sys.executable, 'run_agendamiento.py', f'--usuario_id={usuario_id}'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=os.path.dirname(__file__)
+        )
+        print(f"✅ Proceso iniciado para usuario {usuario_id}")
+    except Exception as e:
+        print(f"❌ Error al iniciar proceso: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error al iniciar: {str(e)}'
+        })
     
     return jsonify({
         'success': True,
-        'message': f'🚀 Iniciando agendamiento para {len(clientes)} clientes'
+        'message': f'🚀 Iniciando agendamiento para {len(clientes)} clientes en segundo plano'
     })
 
 # ========================================
@@ -408,36 +414,45 @@ def ping():
 
 @app.route('/agendar_cron', methods=['POST', 'GET'])
 def agendar_cron():
-    """Endpoint para cron-job.org - ejecuta agendamiento en segundo plano y responde rápido"""
+    """Endpoint para cron-job.org - ejecuta agendamiento en proceso separado"""
+    import subprocess
     import sys
-    from script_agendar import reservar_citas_para_usuario
+    import os
+    from flask import make_response
     
-    def ejecutar_agendamiento():
-        with app.app_context():
-            print("🕒 Iniciando agendamiento desde cron-job.org...")
-            sys.stdout.flush()
-            usuarios = Usuario.query.all()
-            total_procesados = 0
-            
-            for usuario in usuarios:
-                clientes_pendientes = Cliente.query.filter_by(
-                    usuario_id=usuario.id,
-                    cita_reservada=False
-                ).count()
-                
-                if clientes_pendientes > 0:
-                    print(f"🔄 Procesando usuario: {usuario.username} ({clientes_pendientes} clientes)")
-                    sys.stdout.flush()
-                    reservar_citas_para_usuario(usuario.id)
-                    total_procesados += clientes_pendientes
-                else:
-                    print(f"⏭️ Usuario {usuario.username} sin clientes pendientes")
-                    sys.stdout.flush()
-            
-            print(f"✅ Agendamiento completado. {total_procesados} clientes procesados.")
-            sys.stdout.flush()
+    def ejecutar_en_proceso_separado():
+        try:
+            script = f'''
+import sys
+sys.path.append(r'{os.path.dirname(__file__)}')
+from app import app
+from models import db, Usuario, Cliente
+from script_agendar import reservar_citas_para_usuario
+
+with app.app_context():
+    print("🕒 Iniciando agendamiento desde cron-job.org...")
+    usuarios = Usuario.query.all()
+    for usuario in usuarios:
+        clientes_pendientes = Cliente.query.filter_by(
+            usuario_id=usuario.id,
+            cita_reservada=False
+        ).count()
+        if clientes_pendientes > 0:
+            print(f"🔄 Procesando usuario: {{usuario.username}}")
+            reservar_citas_para_usuario(usuario.id)
+    print("✅ Agendamiento completado")
+'''
+            subprocess.Popen(
+                [sys.executable, '-c', script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=os.path.dirname(__file__)
+            )
+            print("✅ Proceso de agendamiento iniciado desde cron")
+        except Exception as e:
+            print(f"❌ Error al iniciar proceso: {e}")
     
-    hilo = threading.Thread(target=ejecutar_agendamiento)
+    hilo = threading.Thread(target=ejecutar_en_proceso_separado)
     hilo.start()
     
     respuesta = make_response("OK", 200)
