@@ -12,6 +12,15 @@ import time
 import os
 from dotenv import load_dotenv
 import sys
+import json
+
+# Importar logger
+try:
+    from logger import leer_logs, limpiar_logs
+    LOGGER_DISPONIBLE = True
+except ImportError:
+    LOGGER_DISPONIBLE = False
+    print("⚠️ logger.py no encontrado. Los logs en tiempo real no estarán disponibles.")
 
 load_dotenv()
 
@@ -458,11 +467,54 @@ with app.app_context():
     respuesta = make_response("OK", 200)
     respuesta.headers['Content-Type'] = 'text/plain'
     return respuesta
+
+# ========================================
+# RUTAS PARA LOGS EN TIEMPO REAL
+# ========================================
+
 @app.route('/logs_html')
 @login_required
 def ver_logs_html():
     """Muestra los logs en una página HTML"""
+    if not LOGGER_DISPONIBLE:
+        return "❌ Logger no disponible. Ejecuta 'python logger.py' primero.", 500
     return render_template('logs.html')
+
+@app.route('/logs')
+@login_required
+def ver_logs():
+    """Devuelve los logs en formato JSON"""
+    if not LOGGER_DISPONIBLE:
+        return jsonify({
+            "pasos": [{"mensaje": "Logger no disponible", "tipo": "error"}],
+            "finalizado": True,
+            "resultado": "Error"
+        })
+    
+    try:
+        logs = leer_logs()
+        if not logs:
+            return jsonify({
+                "pasos": [{"mensaje": "No hay logs disponibles. Ejecuta el agendamiento.", "tipo": "info"}],
+                "finalizado": False,
+                "resultado": "Esperando ejecución..."
+            })
+        return jsonify(logs)
+    except Exception as e:
+        return jsonify({
+            "pasos": [{"mensaje": f"Error al leer logs: {str(e)}", "tipo": "error"}],
+            "finalizado": True,
+            "resultado": "Error"
+        })
+
+@app.route('/limpiar_logs', methods=['POST'])
+@login_required
+def limpiar_logs_endpoint():
+    """Limpia los logs"""
+    if LOGGER_DISPONIBLE:
+        limpiar_logs()
+        return jsonify({"success": True, "message": "Logs limpiados"})
+    return jsonify({"success": False, "message": "Logger no disponible"})
 
 # ========================================
 # CREAR BASE DE DATOS
