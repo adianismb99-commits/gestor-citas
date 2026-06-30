@@ -12,7 +12,6 @@ def reservar_cita_individual(cliente):
     
     with sync_playwright() as p:
         # Lanzar Chromium en modo headless (sin interfaz gráfica)
-        # Esta es la configuración clave para la nube
         navegador = p.chromium.launch(
             headless=True,
             args=['--no-sandbox', '--disable-setuid-sandbox']
@@ -23,7 +22,6 @@ def reservar_cita_individual(cliente):
             print(f"📌 Entrando a la página para {cliente.nombre}...")
             url_visado = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
             
-            # Cargar la página con timeout largo
             pagina.goto(url_visado, timeout=60000)
             pagina.wait_for_load_state("networkidle", timeout=60000)
             
@@ -32,15 +30,12 @@ def reservar_cita_individual(cliente):
             # Buscar el enlace RFX
             print("📌 Buscando enlace 'Reservar cita de visados RFX'...")
             
-            # Esperar a que el enlace aparezca
             try:
                 enlace = pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=30000)
                 print("   ✅ Enlace encontrado")
-                # Hacer clic en el enlace
                 enlace.click()
                 print("   ✅ Click en enlace RFX")
             except:
-                # Si no funciona, buscar por texto parcial
                 enlace = pagina.wait_for_selector("text=Reservar cita de visados", timeout=30000)
                 enlace.click()
                 print("   ✅ Click en enlace por texto parcial")
@@ -48,8 +43,8 @@ def reservar_cita_individual(cliente):
             # Esperar a que se abra la nueva ventana
             time.sleep(5)
             
-            # Obtener todas las páginas (ventanas)
-            paginas = navegador.context.pages
+            # Obtener todas las páginas (ventanas) - CORREGIDO
+            paginas = navegador.pages  # <--- CAMBIO CLAVE
             if len(paginas) > 1:
                 pagina = paginas[-1]  # Cambiar a la última página abierta
                 print("   ✅ Cambiado a la nueva ventana")
