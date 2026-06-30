@@ -1,0 +1,28 @@
+@"
+services:
+  # Servicio web principal
+  - type: web
+    name: gestor-citas-web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
+  # Servicio Cron Job
+  - type: cron
+    name: agendar-citas
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.cron
+    schedule: "*/10 * * * *"
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: 3.11.0
+"@ | Out-File -Encoding utf8 render.yaml

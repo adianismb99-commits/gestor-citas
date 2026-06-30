@@ -1,0 +1,14 @@
+@"
+FROM mcr.microsoft.com/playwright/python:v1.40.0-focal
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+RUN playwright install
+
+CMD ["python", "cron_agendar.py"]
+"@ | Out-File -Encoding utf8 Dockerfile.cron
