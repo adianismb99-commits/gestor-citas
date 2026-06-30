@@ -1,281 +1,351 @@
+import time
 import os
 import sys
-import time
 from datetime import datetime
-from models import db, Cliente
-
-from playwright.sync_api import sync_playwright
+from selenium import webdriver
+from selenium.webdriver.edge.service import Service
+from selenium.webdriver.edge.options import Options
+from selenium.webdriver.common.by import By
 
 def log(mensaje):
-    print(mensaje)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {mensaje}")
     sys.stdout.flush()
 
-def capturar_pantalla(pagina, nombre, cliente_pasaporte=""):
+def capturar(driver, nombre):
     try:
+        archivo = f"static/{nombre}.png"
         os.makedirs("static", exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        archivo = f"static/paso_{nombre}_{cliente_pasaporte}_{timestamp}.png"
-        # Timeout reducido a 10 segundos para evitar bloqueos
-        pagina.screenshot(path=archivo, full_page=True, timeout=10000)
-        log(f"   📸 Captura guardada: {archivo}")
+        driver.save_screenshot(archivo)
+        log(f"📸 Captura: {archivo}")
         return archivo
-    except Exception as e:
-        log(f"   ⚠️ Error al guardar captura: {e}")
+    except:
         return None
 
-def aceptar_cookies(pagina, cliente_pasaporte=""):
-    log("🍪 Buscando banner de cookies...")
-    
-    selectores = [
-        "text=Aceptar",
-        "button:has-text('Aceptar')",
-        "text=Entendido",
-        "button:has-text('Entendido')",
-        "text=Acepto",
-        "button:has-text('Acepto')",
-        "#cookie-accept",
-        ".cookie-accept",
-        "button[class*='cookie']",
-        "button:has-text('Aceptar todas')",
-        "button:has-text('Aceptar cookies')"
-    ]
-    
-    for selector in selectores:
+def esperar_y_clickear(driver, selectores, nombre="elemento"):
+    log(f"⏳ Esperando: {nombre}...")
+    while True:
+        for selector in selectores:
+            try:
+                elemento = driver.find_element(By.XPATH, selector)
+                driver.execute_script("arguments[0].scrollIntoView(true);", elemento)
+                time.sleep(0.5)
+                elemento.click()
+                log(f"✅ Click: {nombre}")
+                return True
+            except:
+                continue
+        time.sleep(1)
+
+def esperar_texto(driver, texto):
+    log(f"⏳ Esperando texto: '{texto}'...")
+    while texto not in driver.page_source:
+        time.sleep(1)
+    log(f"✅ Texto encontrado: '{texto}'")
+
+def esperar_requirejs(driver):
+    log("⏳ Esperando RequireJS...")
+    while True:
         try:
-            boton = pagina.wait_for_selector(selector, timeout=2000)
-            if boton:
-                boton.click()
-                log(f"   ✅ Cookies aceptadas con selector: {selector}")
-                time.sleep(1)
-                capturar_pantalla(pagina, "01_cookies_aceptadas", cliente_pasaporte)
+            script = """
+            return (typeof require !== 'undefined' && 
+                    typeof require.specified !== 'undefined' &&
+                    require.specified('jquery') &&
+                    require.specified('backbone'));
+            """
+            if driver.execute_script(script):
+                log("✅ RequireJS cargado")
                 return True
         except:
-            continue
-    
-    log("   ⚠️ No se encontró banner de cookies, continuando...")
+            pass
+        time.sleep(2)
+
+def verificar_block_cloudflare(driver):
+    pagina = driver.page_source
+    if "cf-browser-verification" in pagina or "challenge-platform" in pagina:
+        return True
+    if "503" in pagina and "TCDN-WAF" in pagina:
+        return True
     return False
 
-def reservar_cita_individual(cliente):
-    log(f"📌 Iniciando reserva para {cliente.nombre}...")
-    pasaporte = cliente.pasaporte
+def reservar_cita(cliente):
+    log(f"🚀 Iniciando reserva para {cliente['nombre']}")
     
-    with sync_playwright() as p:
-        # Usar headless="new" para mejor rendimiento
-        navegador = p.chromium.launch(
-            headless=True,
-            args=['--no-sandbox', '--disable-setuid-sandbox']
-        )
-        pagina = navegador.new_page()
+    # En Render usamos Chrome, no Edge
+    from selenium.webdriver.chrome.service import Service as ChromeService
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    
+    options = ChromeOptions()
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    options.add_argument('--headless')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--disable-gpu')
+    
+    # Usar ChromeDriver
+    from webdriver_manager.chrome import ChromeDriverManager
+    service = ChromeService(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    
+    resultado = {
+        "exito": False,
+        "motivo": "",
+        "captura": None
+    }
+    
+    try:
+        # PASO 1: Cargar página
+        log("📌 Cargando página principal...")
+        url = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
+        driver.get(url)
+        esperar_texto(driver, "Servicios consulares")
+        log("✅ Página cargada")
         
-        # Reducir timeouts
-        pagina.set_default_timeout(30000)
+        if verificar_block_cloudflare(driver):
+            log("❌ CLOUDFLARE BLOQUEA")
+            resultado["motivo"] = "cloudflare_block"
+            capturar(driver, "cloudflare_block")
+            driver.quit()
+            return resultado
         
+        # PASO 2: Cookies
+        log("📌 Aceptando cookies...")
+        selectores_cookies = [
+            "//input[@value='Aceptar']",
+            "//button[contains(text(), 'Aceptar')]",
+            "//button[contains(text(), 'Aceptar cookies')]",
+            "//button[contains(text(), 'Entendido')]",
+        ]
+        esperar_y_clickear(driver, selectores_cookies, "cookies")
+        
+        # PASO 3: RFX
+        log("📌 Buscando RFX...")
+        selectores_rfx = [
+            "//a[contains(text(), 'Reservar cita de visados RFX')]",
+            "//a[contains(text(), 'Reservar cita de visados')]",
+            "//a[contains(@href, 'citaconsular.es')]",
+        ]
+        esperar_y_clickear(driver, selectores_rfx, "RFX")
+        
+        # PASO 4: Nueva ventana + Alerta
+        log("📌 Nueva ventana...")
+        while len(driver.window_handles) < 2:
+            time.sleep(1)
+        driver.switch_to.window(driver.window_handles[-1])
+        log("✅ Nueva ventana abierta")
+        
+        log("⏳ Esperando alerta Welcome/Bienvenido...")
+        while True:
+            try:
+                alerta = driver.switch_to.alert
+                log(f"✅ Alerta detectada: {alerta.text}")
+                alerta.accept()
+                log("✅ Alerta aceptada")
+                break
+            except:
+                time.sleep(1)
+        
+        log("⏳ Esperando URL de citaconsular.es...")
+        while "citaconsular.es" not in driver.current_url:
+            time.sleep(1)
+        log(f"✅ URL: {driver.current_url}")
+        
+        # PASO 5: Continuar
+        log("📌 Continuar...")
+        selectores_continuar = [
+            "//button[contains(text(), 'Continuar')]",
+            "//button[contains(text(), 'Continue')]",
+            "//input[@value='Continuar']",
+            "//*[contains(@class, 'clsDivContinueButton')]",
+        ]
+        esperar_y_clickear(driver, selectores_continuar, "Continuar")
+        
+        # PASO 6: Horarios
+        log("📌 Buscando horarios...")
+        esperar_requirejs(driver)
+        log("⏳ Esperando 5 segundos para estabilizar...")
+        time.sleep(5)
+        
+        pagina = driver.page_source
+        if "No hay horas disponibles" in pagina or "No hay citas disponibles" in pagina:
+            log("❌ No hay citas disponibles")
+            resultado["motivo"] = "no_hay_citas"
+            capturar(driver, "no_hay_citas")
+            driver.quit()
+            return resultado
+        
+        horarios = driver.find_elements(By.CSS_SELECTOR, ".clsDivDatetimeSlot")
+        if len(horarios) == 0:
+            horarios = driver.find_elements(By.XPATH, "//*[contains(text(), ':') and (contains(text(), '8') or contains(text(), '9') or contains(text(), '10'))]")
+        
+        horarios_filtrados = []
+        for h in horarios:
+            texto = h.text.strip()
+            if "No hay" not in texto and "horas" not in texto and "disponibles" not in texto:
+                if texto and any(str(i) in texto for i in range(8, 21)):
+                    horarios_filtrados.append(h)
+        horarios = horarios_filtrados
+        
+        if len(horarios) > 0:
+            log(f"✅ Horarios encontrados: {len(horarios)}")
+            for i, h in enumerate(horarios[:5]):
+                texto = h.text.strip()
+                if texto:
+                    log(f"   {i+1}. {texto}")
+            
+            log("⏳ Seleccionando el primero...")
+            try:
+                horarios[0].click()
+                log("✅ Horario seleccionado")
+            except:
+                driver.execute_script("arguments[0].click();", horarios[0])
+                log("✅ Horario seleccionado (JavaScript)")
+        else:
+            log("❌ No se encontraron horarios")
+            resultado["motivo"] = "no_hay_horarios"
+            capturar(driver, "no_hay_horarios")
+            driver.quit()
+            return resultado
+        
+        # PASO 7: Datos
+        log("📌 Rellenando datos...")
+        inputs = []
+        while len(inputs) == 0:
+            inputs = driver.find_elements(By.XPATH, "//input[@type='text']")
+            time.sleep(1)
+        log(f"✅ Formulario cargado ({len(inputs)} campos)")
+        
+        # Buscar pasaporte
+        campo_pasaporte = None
         try:
-            # PASO 1: Cargar página
-            log(f"📌 Entrando a la página...")
-            url_visado = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
-            
-            pagina.goto(url_visado, timeout=30000)
-            pagina.wait_for_load_state("networkidle", timeout=30000)
-            
-            log("   ✅ Página cargada")
-            capturar_pantalla(pagina, "02_pagina_principal", pasaporte)
-            
-            # PASO 2: Cookies
-            aceptar_cookies(pagina, pasaporte)
-            
-            # PASO 3: RFX
-            log("📌 Buscando enlace RFX...")
+            label = driver.find_element(By.XPATH, "//label[contains(text(), 'Pasaporte') or contains(text(), 'pasaporte') or contains(text(), 'N°') or contains(text(), 'Nº')]")
+            campo_pasaporte = driver.find_element(By.XPATH, f"//label[contains(text(), 'Pasaporte') or contains(text(), 'pasaporte') or contains(text(), 'N°') or contains(text(), 'Nº')]/following::input[1]")
+            log("✅ Pasaporte por LABEL")
+        except:
+            pass
+        
+        if campo_pasaporte is None:
             try:
-                enlace = pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=15000)
-                log("   ✅ Enlace encontrado")
-                capturar_pantalla(pagina, "03_enlace_rfx", pasaporte)
-                enlace.click()
-                log("   ✅ Click en RFX")
-            except:
-                enlace = pagina.wait_for_selector("text=Reservar cita de visados", timeout=15000)
-                log("   ✅ Enlace encontrado (parcial)")
-                enlace.click()
-                log("   ✅ Click en RFX (parcial)")
-            
-            time.sleep(2)
-            
-            # PASO 4: Nueva ventana
-            log("📊 Esperando nueva ventana...")
-            
-            try:
-                with navegador.context.expect_page(timeout=15000) as nueva_pagina_info:
-                    # Reintentar clic si es necesario
-                    pass
-                # Ya debería estar en la nueva página
-            except:
-                # Si no hay nueva página, navegar directamente
-                try:
-                    href = enlace.get_attribute('href')
-                    if href and "citaconsular" in href:
-                        log(f"   🔄 Navegando directamente a: {href}")
-                        pagina.goto(href, timeout=30000)
-                        log("   ✅ Navegación directa")
-                except Exception as e:
-                    log(f"   ⚠️ Error en navegación: {e}")
-            
-            time.sleep(2)
-            
-            # Obtener páginas
-            try:
-                paginas = navegador.contexts[0].pages
-                if len(paginas) > 1:
-                    pagina = paginas[-1]
-                    log("   ✅ Cambiado a nueva ventana")
-                else:
-                    log("   ⚠️ No hay nueva ventana, continuando...")
+                campo_pasaporte = driver.find_element(By.XPATH, "//input[@placeholder='Pasaporte' or contains(@placeholder, 'pasaporte')]")
+                log("✅ Pasaporte por PLACEHOLDER")
             except:
                 pass
-            
-            capturar_pantalla(pagina, "04_nueva_ventana", pasaporte)
-            
-            # PASO 5: Bienvenida
-            log("📌 Buscando bienvenida...")
-            time.sleep(2)
-            
-            selectores_bienvenida = [
-                "text=Aceptar",
-                "button:has-text('Aceptar')",
-                "text=Entendido",
-                "text=Welcome",
-                "button:has-text('Welcome')",
-                "button[class*='welcome']"
-            ]
-            
-            for selector in selectores_bienvenida:
-                try:
-                    boton = pagina.wait_for_selector(selector, timeout=2000)
-                    if boton:
-                        boton.click()
-                        log(f"   ✅ Click en Aceptar (bienvenida)")
-                        time.sleep(1)
-                        break
-                except:
-                    continue
-            
-            capturar_pantalla(pagina, "05_bienvenida", pasaporte)
-            
-            # PASO 6: Continuar
-            log("📌 Buscando Continuar...")
+        
+        if campo_pasaporte is None:
+            inputs_local = driver.find_elements(By.XPATH, "//input[@type='text']")
+            if len(inputs_local) >= 2:
+                campo_pasaporte = inputs_local[1]
+                log("✅ Pasaporte como SEGUNDO campo")
+            elif len(inputs_local) >= 1:
+                campo_pasaporte = inputs_local[0]
+                log("⚠️ Usando PRIMER campo como pasaporte")
+        
+        if campo_pasaporte:
             try:
-                continuar = pagina.wait_for_selector("text=Continuar", timeout=5000)
-                continuar.click()
-                log("   ✅ Click en Continuar")
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", campo_pasaporte)
+                time.sleep(0.5)
+                campo_pasaporte.click()
+                time.sleep(0.5)
+                campo_pasaporte.clear()
+                campo_pasaporte.send_keys(cliente["pasaporte"])
+                log(f"✅ Pasaporte: {cliente['pasaporte']}")
             except:
-                try:
-                    continuar = pagina.wait_for_selector("text=Continue", timeout=5000)
-                    continuar.click()
-                    log("   ✅ Click en Continue")
-                except:
-                    try:
-                        continuar = pagina.wait_for_selector("button:has-text('Continuar')", timeout=5000)
-                        continuar.click()
-                        log("   ✅ Click en Continuar (genérico)")
-                    except:
-                        log("   ⚠️ No se encontró Continuar")
-                        capturar_pantalla(pagina, "06_error_continuar", pasaporte)
-            
-            time.sleep(2)
-            capturar_pantalla(pagina, "07_despues_continuar", pasaporte)
-            
-            # PASO 7: Horarios
-            log("📌 Buscando horarios...")
-            horarios = pagina.query_selector_all("text=/[0-9]:[0-9]{2}/")
-            if len(horarios) == 0:
-                horarios = pagina.query_selector_all("text=/8:[0-9]{2}/")
-            
-            if len(horarios) == 0:
-                log("❌ No hay citas disponibles")
-                capturar_pantalla(pagina, "08_no_hay_citas", pasaporte)
-                cliente.cita_reservada = False
-                db.session.commit()
-                navegador.close()
-                return False, "No hay citas disponibles"
-            
-            log(f"✅ Horarios: {len(horarios)}")
-            horarios[0].click()
-            capturar_pantalla(pagina, "09_horario_seleccionado", pasaporte)
-            
-            time.sleep(2)
-            
-            # PASO 8: Datos
-            log("📌 Rellenando datos...")
-            inputs = pagina.query_selector_all("input[type='text']")
-            if len(inputs) >= 1:
-                inputs[0].fill(cliente.pasaporte)
-                log(f"   ✅ Pasaporte: {cliente.pasaporte}")
-            
-            password_input = pagina.query_selector("input[type='password']")
-            if password_input:
-                password_input.fill(cliente.contrasena_cita)
-                log("   ✅ Contraseña ingresada")
-            elif len(inputs) >= 2:
-                inputs[1].fill(cliente.contrasena_cita)
-                log("   ✅ Contraseña ingresada (como texto)")
-            
-            capturar_pantalla(pagina, "10_datos_ingresados", pasaporte)
-            
-            # PASO 9: Confirmar
+                driver.execute_script("arguments[0].value = arguments[1];", campo_pasaporte, cliente["pasaporte"])
+                log(f"✅ Pasaporte (JS): {cliente['pasaporte']}")
+        else:
+            log("❌ No se encontró campo de pasaporte")
+        
+        # Buscar contraseña
+        campo_password = None
+        try:
+            label = driver.find_element(By.XPATH, "//label[contains(text(), 'Contraseña') or contains(text(), 'contraseña') or contains(text(), 'Password')]")
+            campo_password = driver.find_element(By.XPATH, f"//label[contains(text(), 'Contraseña') or contains(text(), 'contraseña') or contains(text(), 'Password')]/following::input[1]")
+            log("✅ Contraseña por LABEL")
+        except:
+            pass
+        
+        if campo_password is None:
             try:
-                confirmar = pagina.wait_for_selector("text=Confirmar", timeout=5000)
-                confirmar.click()
-                log("   ✅ Click en Confirmar")
-            except:
-                try:
-                    confirmar = pagina.wait_for_selector("button:has-text('Confirmar')", timeout=5000)
-                    confirmar.click()
-                    log("   ✅ Click en Confirmar (genérico)")
-                except:
-                    log("   ⚠️ No se encontró Confirmar")
-                    capturar_pantalla(pagina, "11_error_confirmar", pasaporte)
-            
-            time.sleep(3)
-            
-            # PASO 10: Confirmación final
-            log("📌 Verificando confirmación...")
-            try:
-                pagina.wait_for_selector("text=Su reserva se ha realizado con éxito", timeout=10000)
-                log("✅ Confirmación encontrada")
-                
-                fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
-                archivo = f"static/cita_{pasaporte}_{fecha}.png"
-                pagina.screenshot(path=archivo, full_page=True, timeout=10000)
-                
-                cliente.cita_reservada = True
-                cliente.fecha_cita = datetime.now()
-                cliente.comprobante = archivo
-                db.session.commit()
-                
-                log(f"🎉 ¡CITA CONFIRMADA para {cliente.nombre}!")
-                navegador.close()
-                return True, "Cita reservada exitosamente"
-            except:
-                log("❌ No se encontró confirmación")
-                capturar_pantalla(pagina, "12_error_confirmacion", pasaporte)
-                navegador.close()
-                return False, "No se encontró confirmación"
-                
-        except Exception as e:
-            log(f"❌ Error: {e}")
-            try:
-                archivo_error = f"static/error_final_{pasaporte}.png"
-                pagina.screenshot(path=archivo_error, full_page=True, timeout=10000)
+                campo_password = driver.find_element(By.XPATH, "//input[@placeholder='Contraseña' or contains(@placeholder, 'contraseña')]")
+                log("✅ Contraseña por PLACEHOLDER")
             except:
                 pass
-            cliente.cita_reservada = False
-            db.session.commit()
-            navegador.close()
-            return False, str(e)
+        
+        if campo_password is None:
+            try:
+                campo_password = driver.find_element(By.XPATH, "//input[@type='password']")
+                log("✅ Contraseña por tipo password")
+            except:
+                pass
+        
+        if campo_password:
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", campo_password)
+                time.sleep(0.5)
+                campo_password.click()
+                time.sleep(0.5)
+                campo_password.clear()
+                campo_password.send_keys(cliente["contrasena"])
+                log("✅ Contraseña ingresada")
+            except:
+                driver.execute_script("arguments[0].value = arguments[1];", campo_password, cliente["contrasena"])
+                log("✅ Contraseña (JS)")
+        else:
+            log("❌ No se encontró campo de contraseña")
+        
+        # PASO 8: Confirmar
+        log("📌 Confirmando...")
+        selectores_confirmar = [
+            "//button[contains(text(), 'Confirmar')]",
+            "//button[contains(text(), 'Confirm')]",
+            "//input[@value='Confirmar']",
+            "//button[contains(@class, 'confirm')]",
+        ]
+        esperar_y_clickear(driver, selectores_confirmar, "Confirmar")
+        
+        # PASO 9: Resultado
+        log("📌 Verificando resultado...")
+        for _ in range(30):
+            if "Su reserva se ha realizado con éxito" in driver.page_source:
+                log("🎉 CITA CONFIRMADA!")
+                resultado["exito"] = True
+                resultado["motivo"] = "cita_confirmada"
+                capturar(driver, "cita_confirmada")
+                driver.quit()
+                return resultado
+            if "No hay" in driver.page_source and "horas" in driver.page_source:
+                log("❌ No hay citas")
+                resultado["motivo"] = "no_hay_citas"
+                capturar(driver, "no_hay_citas")
+                driver.quit()
+                return resultado
+            time.sleep(1)
+        
+        log("❌ No se confirmó")
+        resultado["motivo"] = "no_confirmacion"
+        capturar(driver, "no_confirmacion")
+        driver.quit()
+        return resultado
+        
+    except Exception as e:
+        log(f"❌ Error: {e}")
+        resultado["motivo"] = f"error: {str(e)[:100]}"
+        try:
+            capturar(driver, "error")
+        except:
+            pass
+        driver.quit()
+        return resultado
 
 def reservar_citas_para_usuario(usuario_id):
+    """Función que llama Render desde app.py"""
     log(f"🚀 Iniciando agendamiento para usuario {usuario_id}")
     
     from app import app
+    from models import db, Cliente
     
     with app.app_context():
         clientes = Cliente.query.filter_by(
@@ -292,13 +362,32 @@ def reservar_citas_para_usuario(usuario_id):
         
         for cliente in clientes:
             log(f"\n🔄 Procesando: {cliente.nombre}")
-            exito, mensaje = reservar_cita_individual(cliente)
-            resultados.append({
-                'cliente': cliente.nombre,
-                'exito': exito,
-                'mensaje': mensaje
-            })
+            cliente_dict = {
+                "nombre": cliente.nombre,
+                "pasaporte": cliente.pasaporte,
+                "contrasena": cliente.contrasena_cita
+            }
+            resultado = reservar_cita(cliente_dict)
+            
+            if resultado["exito"]:
+                cliente.cita_reservada = True
+                cliente.fecha_cita = datetime.now()
+                cliente.comprobante = resultado.get("captura", "")
+                db.session.commit()
+                log(f"✅ {cliente.nombre} - CITA RESERVADA")
+            else:
+                log(f"❌ {cliente.nombre} - {resultado['motivo']}")
+            
+            resultados.append(resultado)
             time.sleep(5)
         
         log("\n🏁 Proceso completado")
         return resultados
+
+if __name__ == "__main__":
+    cliente = {
+        "nombre": "Prueba Test",
+        "pasaporte": "N123456",
+        "contrasena": "tu_contraseña_real"
+    }
+    reservar_cita(cliente)
