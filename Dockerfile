@@ -1,15 +1,34 @@
-FROM mcr.microsoft.com/playwright/python:v1.40.0-focal
+FROM python:3.11-slim
 
+# ============================================
+# INSTALAR CHROME Y DEPENDENCIAS
+# ============================================
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    unzip \
+    curl \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+    && apt-get update && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================
+# INSTALAR DEPENDENCIAS DE PYTHON
+# ============================================
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# ============================================
+# COPIAR EL RESTO DEL CÓDIGO
+# ============================================
 COPY . .
 
-RUN playwright install
-
+# ============================================
+# EXPONER PUERTO Y EJECUTAR
+# ============================================
 EXPOSE 10000
 
-# Usar el archivo de configuración de Gunicorn
-CMD ["gunicorn", "app:app", "--config", "gunicorn.conf.py", "--bind", "0.0.0.0:10000"]
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
