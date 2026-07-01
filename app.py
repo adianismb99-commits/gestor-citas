@@ -28,7 +28,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # ========================================
-# LOGGER INTEGRADO (sin archivo externo)
+# LOGGER INTEGRADO
 # ========================================
 
 LOG_FILE = "logs_actuales.json"
@@ -71,7 +71,6 @@ def agregar_paso(mensaje, tipo="info", paso_numero=None):
     logs["pasos"].append(paso)
     guardar_logs(logs)
     
-    # También imprimir en consola para Render
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {mensaje}")
     sys.stdout.flush()
 
@@ -425,9 +424,7 @@ def configuracion():
 @app.route('/agendar_ahora', methods=['POST'])
 @login_required
 def agendar_ahora():
-    import subprocess
-    import sys
-    import os
+    from script_agendar import reservar_citas_para_usuario
     
     clientes = Cliente.query.filter_by(
         usuario_id=current_user.id,
@@ -442,29 +439,20 @@ def agendar_ahora():
     
     usuario_id = current_user.id
     
-    # Limpiar logs antes de empezar
     limpiar_logs()
     log_info(f"🚀 Iniciando agendamiento para usuario {current_user.username}")
     log_info(f"📋 Clientes a procesar: {len(clientes)}")
     
-    try:
-        subprocess.Popen(
-            [sys.executable, 'run_agendamiento.py', f'--usuario_id={usuario_id}'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=os.path.dirname(__file__)
-        )
-        log_success(f"✅ Proceso iniciado para {len(clientes)} clientes")
-    except Exception as e:
-        log_error(f"❌ Error al iniciar: {e}")
-        return jsonify({
-            'success': False,
-            'message': f'Error al iniciar: {str(e)}'
-        })
+    def ejecutar():
+        with app.app_context():
+            reservar_citas_para_usuario(usuario_id)
+    
+    hilo = threading.Thread(target=ejecutar)
+    hilo.start()
     
     return jsonify({
         'success': True,
-        'message': f'🚀 Iniciando agendamiento para {len(clientes)} clientes en segundo plano'
+        'message': f'🚀 Iniciando agendamiento para {len(clientes)} clientes'
     })
 
 @app.route('/ping', methods=['GET'])
@@ -473,52 +461,32 @@ def ping():
 
 @app.route('/agendar_cron', methods=['POST', 'GET'])
 def agendar_cron():
-    import subprocess
-    import sys
-    import os
-    from flask import make_response
+    from script_agendar import reservar_citas_para_usuario
     
-    def ejecutar_en_proceso_separado():
-        try:
-            limpiar_logs()
+    def ejecutar_agendamiento():
+        with app.app_context():
             log_info("🕒 Iniciando agendamiento desde cron-job.org...")
-            
-            script = f'''
-import sys
-sys.path.append(r'{os.path.dirname(__file__)}')
-from app import app
-from models import db, Usuario, Cliente
-from script_agendar import reservar_citas_para_usuario
-
-with app.app_context():
-    print("🕒 Iniciando agendamiento desde cron-job.org...")
-    usuarios = Usuario.query.all()
-    for usuario in usuarios:
-        clientes_pendientes = Cliente.query.filter_by(
-            usuario_id=usuario.id,
-            cita_reservada=False
-        ).count()
-        if clientes_pendientes > 0:
-            print(f"🔄 Procesando usuario: {{usuario.username}}")
-            reservar_citas_para_usuario(usuario.id)
-    print("✅ Agendamiento completado")
-'''
-            subprocess.Popen(
-                [sys.executable, '-c', script],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=os.path.dirname(__file__)
-            )
-            log_success("✅ Proceso de agendamiento iniciado desde cron")
-        except Exception as e:
-            log_error(f"❌ Error al iniciar proceso: {e}")
+            usuarios = Usuario.query.all()
+            for usuario in usuarios:
+                clientes_pendientes = Cliente.query.filter_by(
+                    usuario_id=usuario.id,
+                    cita_reservada=False
+                ).count()
+                if clientes_pendientes > 0:
+                    log_info(f"🔄 Procesando usuario: {usuario.username}")
+                    reservar_citas_para_usuario(usuario.id)
+            log_success("✅ Agendamiento completado")
     
-    hilo = threading.Thread(target=ejecutar_en_proceso_separado)
+    hilo = threading.Thread(target=ejecutar_agendamiento)
     hilo.start()
     
     respuesta = make_response("OK", 200)
     respuesta.headers['Content-Type'] = 'text/plain'
     return respuesta
+
+# ========================================
+# RUTAS PARA LOGS EN TIEMPO REAL (SOLO UNA VEZ)
+# ========================================
 
 @app.route('/logs_html')
 @login_required
@@ -557,45 +525,6 @@ def limpiar_logs_endpoint():
 with app.app_context():
     db.create_all()
     print("✅ Base de datos creada correctamente")
-
-# ========================================
-# RUTAS PARA LOGS EN TIEMPO REAL
-# ========================================
-
-from logger import leer_logs, limpiar_logs
-
-@app.route('/logs_html')
-@login_required
-def ver_logs_html():
-    """Muestra los logs en una página HTML"""
-    return render_template('logs.html')
-
-@app.route('/logs')
-@login_required
-def ver_logs():
-    """Devuelve los logs en formato JSON"""
-    try:
-        logs = leer_logs()
-        if not logs:
-            return jsonify({
-                "pasos": [{"mensaje": "No hay logs disponibles. Ejecuta el agendamiento.", "tipo": "info"}],
-                "finalizado": False,
-                "resultado": "Esperando ejecución..."
-            })
-        return jsonify(logs)
-    except Exception as e:
-        return jsonify({
-            "pasos": [{"mensaje": f"Error: {str(e)}", "tipo": "error"}],
-            "finalizado": True,
-            "resultado": "Error"
-        })
-
-@app.route('/limpiar_logs', methods=['POST'])
-@login_required
-def limpiar_logs_endpoint():
-    """Limpia los logs"""
-    limpiar_logs()
-    return jsonify({"success": True, "message": "Logs limpiados"})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
