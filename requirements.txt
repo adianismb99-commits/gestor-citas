@@ -4,4 +4,6 @@ flask-sqlalchemy
 gunicorn
 python-dotenv
 bcrypt
+selenium
+webdriver-manager
 playwright
