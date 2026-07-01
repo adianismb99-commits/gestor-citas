@@ -64,6 +64,15 @@
             margin-left: 10px;
             color: #666;
         }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-danger:hover { background: #c82333; }
     </style>
 </head>
 <body>
@@ -79,7 +88,7 @@
         
         <div class="acciones">
             <button onclick="cargarLogs()" class="refresh-btn">🔄 Actualizar</button>
-            <button onclick="limpiarLogs()" class="btn btn-danger" style="padding: 8px 20px;">🗑️ Limpiar</button>
+            <button onclick="limpiarLogs()" class="btn-danger">🗑️ Limpiar</button>
             <label class="auto-refresh">
                 <input type="checkbox" id="autoRefresh" checked onchange="toggleAutoRefresh()"> 
                 Auto-refresh (10s)
@@ -116,7 +125,6 @@
                     
                     let html = '';
                     
-                    // Mostrar estado
                     let estado = 'en-ejecucion';
                     let estadoTexto = '🔄 En ejecución...';
                     if (data.finalizado) {
@@ -133,7 +141,6 @@
                     }
                     html += `<div class="log-status ${estado}">${estadoTexto}</div><br><br>`;
                     
-                    // Mostrar pasos
                     data.pasos.forEach(paso => {
                         let clase = paso.tipo || 'info';
                         let icono = '';
@@ -154,7 +161,6 @@
                         `;
                     });
                     
-                    // Si está finalizado, mostrar resumen
                     if (data.finalizado) {
                         let claseResumen = data.resultado && data.resultado.includes('CITA CONFIRMADA') ? 'exito' : 'error';
                         if (data.resultado && data.resultado.includes('No hay')) {
@@ -169,8 +175,6 @@
                     }
                     
                     container.innerHTML = html;
-                    
-                    // Auto-scroll al final
                     container.scrollTop = container.scrollHeight;
                 })
                 .catch(error => {
@@ -204,7 +208,6 @@
             intervalo = setInterval(cargarLogs, 10000);
         }
         
-        // Cargar logs al entrar
         document.addEventListener('DOMContentLoaded', function() {
             cargarLogs();
             if (document.getElementById('autoRefresh').checked) {

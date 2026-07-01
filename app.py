@@ -558,5 +558,44 @@ with app.app_context():
     db.create_all()
     print("✅ Base de datos creada correctamente")
 
+# ========================================
+# RUTAS PARA LOGS EN TIEMPO REAL
+# ========================================
+
+from logger import leer_logs, limpiar_logs
+
+@app.route('/logs_html')
+@login_required
+def ver_logs_html():
+    """Muestra los logs en una página HTML"""
+    return render_template('logs.html')
+
+@app.route('/logs')
+@login_required
+def ver_logs():
+    """Devuelve los logs en formato JSON"""
+    try:
+        logs = leer_logs()
+        if not logs:
+            return jsonify({
+                "pasos": [{"mensaje": "No hay logs disponibles. Ejecuta el agendamiento.", "tipo": "info"}],
+                "finalizado": False,
+                "resultado": "Esperando ejecución..."
+            })
+        return jsonify(logs)
+    except Exception as e:
+        return jsonify({
+            "pasos": [{"mensaje": f"Error: {str(e)}", "tipo": "error"}],
+            "finalizado": True,
+            "resultado": "Error"
+        })
+
+@app.route('/limpiar_logs', methods=['POST'])
+@login_required
+def limpiar_logs_endpoint():
+    """Limpia los logs"""
+    limpiar_logs()
+    return jsonify({"success": True, "message": "Logs limpiados"})
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

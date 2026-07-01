@@ -1,30 +1,18 @@
 # logger.py
-import time
-from datetime import datetime
-from flask import session
 import json
 import os
+from datetime import datetime
 
 LOG_FILE = "logs_actuales.json"
 
-def iniciar_logs():
-    """Inicia un nuevo registro de logs"""
-    log_data = {
-        "inicio": datetime.now().isoformat(),
-        "pasos": [],
-        "finalizado": False,
-        "resultado": ""
-    }
-    guardar_logs(log_data)
-    return log_data
-
 def guardar_logs(log_data):
-    """Guarda los logs en un archivo JSON"""
-    with open(LOG_FILE, "w") as f:
-        json.dump(log_data, f, indent=2)
+    try:
+        with open(LOG_FILE, "w") as f:
+            json.dump(log_data, f, indent=2)
+    except:
+        pass
 
 def leer_logs():
-    """Lee los logs actuales"""
     try:
         with open(LOG_FILE, "r") as f:
             return json.load(f)
@@ -32,22 +20,23 @@ def leer_logs():
         return None
 
 def agregar_paso(mensaje, tipo="info", paso_numero=None):
-    """Agrega un paso a los logs"""
     logs = leer_logs()
     if not logs:
-        logs = iniciar_logs()
+        logs = {
+            "inicio": datetime.now().isoformat(),
+            "pasos": [],
+            "finalizado": False,
+            "resultado": ""
+        }
     
     paso = {
         "mensaje": mensaje,
-        "tipo": tipo,  # info, success, warning, error
+        "tipo": tipo,
         "timestamp": datetime.now().isoformat(),
         "paso": paso_numero
     }
     logs["pasos"].append(paso)
     guardar_logs(logs)
-    
-    # También imprimir en consola para Render
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {mensaje}")
 
 def log_info(mensaje, paso=None):
     agregar_paso(mensaje, "info", paso)
@@ -62,7 +51,6 @@ def log_error(mensaje, paso=None):
     agregar_paso(mensaje, "error", paso)
 
 def finalizar_logs(resultado):
-    """Marca los logs como finalizados"""
     logs = leer_logs()
     if logs:
         logs["finalizado"] = True
@@ -71,6 +59,5 @@ def finalizar_logs(resultado):
         guardar_logs(logs)
 
 def limpiar_logs():
-    """Limpia los logs antiguos"""
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
