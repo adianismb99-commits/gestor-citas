@@ -1,4 +1,3 @@
-@"
 import os
 import sys
 from app import app
@@ -28,4 +27,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-"@ | Out-File -Encoding utf8 cron_agendar.py
