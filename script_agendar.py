@@ -154,80 +154,57 @@ def reservar_cita(cliente):
             paso_actual += 1
             
             # ============================================================
-            # PASO 3: RFX
+            # PASO 3: RFX + ESPERAR NUEVA VENTANA CON expect_page()
             # ============================================================
             if LOGGER_OK:
-                log_info("📌 PASO 3: RFX...", paso_actual)
+                log_info("📌 PASO 3: RFX y esperando nueva ventana...", paso_actual)
+
+            log("⏳ Preparando para hacer clic en RFX y capturar nueva ventana...")
+            if LOGGER_OK:
+                log_info("⏳ Preparando expect_page...", paso_actual)
+
             try:
-                pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=30000)
-                pagina.click("text=Reservar cita de visados RFX")
-                log("✅ RFX encontrado")
+                with navegador.context.expect_page() as nueva_pagina_info:
+                    # Buscar y hacer clic en el enlace RFX
+                    try:
+                        enlace = pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=30000)
+                        if enlace:
+                            log("✅ Enlace RFX encontrado, haciendo click...")
+                            if LOGGER_OK:
+                                log_success("✅ Enlace RFX encontrado", paso_actual)
+                            enlace.click()
+                    except:
+                        # Intentar por href
+                        enlace = pagina.wait_for_selector("a[href*='citaconsular.es']", timeout=30000)
+                        if enlace:
+                            log("✅ Enlace RFX encontrado por href, haciendo click...")
+                            if LOGGER_OK:
+                                log_success("✅ Enlace RFX encontrado por href", paso_actual)
+                            enlace.click()
+                
+                # Obtener la nueva página
+                pagina = nueva_pagina_info.value
+                log("✅ Nueva ventana capturada con expect_page!")
                 if LOGGER_OK:
-                    log_success("✅ RFX encontrado", paso_actual)
-            except:
-                try:
-                    pagina.wait_for_selector("a[href*='citaconsular.es']", timeout=30000)
-                    pagina.click("a[href*='citaconsular.es']")
-                    log("✅ RFX encontrado (por href)")
-                    if LOGGER_OK:
-                        log_success("✅ RFX encontrado", paso_actual)
-                except:
-                    log("❌ No se encontró RFX")
-                    if LOGGER_OK:
-                        log_error("❌ No se encontró RFX", paso_actual)
-                    resultado["motivo"] = "no_rfx"
-                    navegador.close()
-                    return resultado
+                    log_success("✅ Nueva ventana capturada con expect_page", paso_actual)
+                    
+            except Exception as e:
+                log(f"❌ Error al capturar nueva ventana: {e}")
+                if LOGGER_OK:
+                    log_error(f"❌ Error al capturar nueva ventana: {e}", paso_actual)
+                resultado["motivo"] = "expect_page_failed"
+                navegador.close()
+                return resultado
+
             paso_actual += 1
-            
+
             # ============================================================
-            # PASO 4: NUEVA VENTANA + ALERTA (CON LOGS ULTRA DETALLADOS)
+            # PASO 4: ESPERAR CARGA DE CITACONSULAR
             # ============================================================
-            log("=" * 50)
-            log("🔍 INICIANDO PASO 4: NUEVA VENTANA Y ALERTA")
-            log("=" * 50)
             if LOGGER_OK:
-                log_info("📌 PASO 4: Iniciando búsqueda de nueva ventana...", paso_actual)
+                log_info("📌 PASO 4: Esperando carga de citaconsular.es...", paso_actual)
 
-            # 1. Verificar cuántas páginas hay actualmente
-            log("📊 Verificando páginas actuales...")
-            paginas_actuales = len(navegador.contexts[0].pages)
-            log(f"   📄 Páginas actuales: {paginas_actuales}")
-            if LOGGER_OK:
-                log_info(f"📄 Páginas actuales: {paginas_actuales}", paso_actual)
-
-            # 2. Esperar a que se abra una nueva página
-            log("⏳ Esperando que se abra una NUEVA página (ventana)...")
-            log("   💡 Si no se abre, puede ser que el enlace RFX no funcionó")
-            if LOGGER_OK:
-                log_info("⏳ Esperando nueva ventana...", paso_actual)
-
-            intentos = 0
-            while len(navegador.contexts[0].pages) < 2:
-                intentos += 1
-                if intentos % 5 == 0:
-                    paginas_actuales = len(navegador.contexts[0].pages)
-                    log(f"   ⏳ Esperando... ({intentos}s) - Páginas actuales: {paginas_actuales}")
-                    if LOGGER_OK:
-                        log_info(f"⏳ Esperando nueva ventana... ({intentos}s) - Páginas: {paginas_actuales}", paso_actual)
-                time.sleep(1)
-
-            # 3. Nueva ventana detectada
-            log("✅ NUEVA VENTANA DETECTADA!")
-            paginas = navegador.contexts[0].pages
-            log(f"   📄 Total de páginas: {len(paginas)}")
-            if LOGGER_OK:
-                log_success("✅ Nueva ventana detectada", paso_actual)
-
-            # 4. Cambiar a la nueva página
-            log("🔄 Cambiando a la nueva página...")
-            pagina = paginas[-1]
-            log(f"   📍 URL actual de la nueva página: {pagina.url}")
-            if LOGGER_OK:
-                log_info(f"📍 Cambiando a nueva página: {pagina.url}", paso_actual)
-
-            # 5. Esperar a que la URL sea citaconsular.es
-            log("⏳ Esperando que la URL sea citaconsular.es...")
+            log("⏳ Esperando que cargue citaconsular.es...")
             if LOGGER_OK:
                 log_info("⏳ Esperando URL de citaconsular.es...", paso_actual)
 
@@ -244,7 +221,6 @@ def reservar_cita(cliente):
             if LOGGER_OK:
                 log_success(f"✅ URL cargada: {pagina.url}", paso_actual)
 
-            # 6. Esperar a que cargue el contenido de la página
             log("⏳ Esperando que cargue el contenido de la página...")
             if LOGGER_OK:
                 log_info("⏳ Esperando contenido de la página...", paso_actual)
@@ -259,9 +235,7 @@ def reservar_cita(cliente):
                 if LOGGER_OK:
                     log_warning("⚠️ Timeout networkidle, continuando...", paso_actual)
 
-            # 7. Verificar si hay alerta de bienvenida
             log("🔍 Buscando alerta de bienvenida...")
-            log("   🔎 Buscando el botón 'Aceptar' de la bienvenida")
             if LOGGER_OK:
                 log_info("🔍 Buscando alerta de bienvenida...", paso_actual)
 
@@ -271,7 +245,6 @@ def reservar_cita(cliente):
                     alerta = pagina.wait_for_selector("text=Aceptar", timeout=1000)
                     if alerta:
                         log("✅ Botón 'Aceptar' encontrado!")
-                        log("🖱️ Haciendo click en Aceptar...")
                         alerta.click()
                         log("✅ Alerta aceptada correctamente")
                         if LOGGER_OK:
@@ -280,33 +253,17 @@ def reservar_cita(cliente):
                 except:
                     intentos += 1
                     if intentos % 5 == 0:
-                        # Verificar si la página tiene algún contenido
                         contenido = pagina.content()
                         if "No hay" in contenido and "horas" in contenido:
                             log("   ⚠️ La página dice 'No hay horas disponibles'")
                             if LOGGER_OK:
                                 log_warning("⚠️ No hay horas disponibles en la página", paso_actual)
-                        elif "bienvenido" in contenido.lower() or "welcome" in contenido.lower():
-                            log("   ℹ️ La página tiene contenido de bienvenida, esperando botón...")
                         else:
                             log(f"   ⏳ Esperando alerta... ({intentos}s)")
                             if LOGGER_OK:
                                 log_info(f"⏳ Esperando alerta... ({intentos}s)", paso_actual)
                     time.sleep(1)
 
-            # 8. Verificar si hay otros elementos
-            log("🔍 Verificando si hay otros elementos en la página...")
-            try:
-                titulo = pagina.title()
-                log(f"   📌 Título de la página: {titulo}")
-                if LOGGER_OK:
-                    log_info(f"📌 Título: {titulo}", paso_actual)
-            except:
-                log("   ⚠️ No se pudo obtener el título")
-                if LOGGER_OK:
-                    log_warning("⚠️ No se pudo obtener el título", paso_actual)
-
-            # 9. Captura de pantalla para verificar el estado
             log("📸 Tomando captura de pantalla del PASO 4...")
             capturar(pagina, "paso_4_ventana_cargada")
             log("✅ Captura guardada: paso_4_ventana_cargada.png")
