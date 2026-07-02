@@ -108,7 +108,9 @@ def reservar_cita(cliente):
         paso_actual = 1
         
         try:
-            # PASO 1: Cargar página
+            # ============================================================
+            # PASO 1: CARGAR PÁGINA
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 1: Cargando página...", paso_actual)
             url = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
@@ -129,7 +131,9 @@ def reservar_cita(cliente):
                     finalizar_logs("Bloqueado por Cloudflare")
                 return resultado
             
-            # PASO 2: Cookies
+            # ============================================================
+            # PASO 2: COOKIES
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 2: Cookies...", paso_actual)
             try:
@@ -151,7 +155,9 @@ def reservar_cita(cliente):
                         log_warning("⚠️ No se encontraron cookies", paso_actual)
             paso_actual += 1
             
+            # ============================================================
             # PASO 3: RFX
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 3: RFX...", paso_actual)
             try:
@@ -176,37 +182,59 @@ def reservar_cita(cliente):
                     return resultado
             paso_actual += 1
             
-            # PASO 4: Nueva ventana + Alerta
+            # ============================================================
+            # PASO 4: NUEVA VENTANA + ALERTA (CON ESPERA INFINITA)
+            # ============================================================
             if LOGGER_OK:
-                log_info("📌 PASO 4: Nueva ventana...", paso_actual)
-            
-            # Esperar a que se abra nueva página
-            time.sleep(3)
-            paginas = navegador.contexts[0].pages  # <--- CORREGIDO
-            if len(paginas) > 1:
-                pagina = paginas[-1]
-                log("✅ Cambiado a nueva ventana")
-                if LOGGER_OK:
-                    log_success("✅ Nueva ventana", paso_actual)
-            
-            # Aceptar alerta si existe
-            try:
-                alerta = pagina.wait_for_selector("text=Aceptar", timeout=5000)
-                alerta.click()
-                log("✅ Alerta aceptada")
-                if LOGGER_OK:
-                    log_success("✅ Alerta aceptada", paso_actual)
-            except:
-                pass
-            
-            # Esperar URL
+                log_info("📌 PASO 4: Esperando nueva ventana...", paso_actual)
+
+            log("⏳ Esperando que se abra la nueva ventana...")
+            if LOGGER_OK:
+                log_info("⏳ Esperando nueva ventana...", paso_actual)
+
+            # Esperar INFINITO hasta que haya más de 1 página
+            while len(navegador.contexts[0].pages) < 2:
+                time.sleep(1)
+
+            paginas = navegador.contexts[0].pages
+            pagina = paginas[-1]
+            log("✅ Nueva ventana abierta")
+            if LOGGER_OK:
+                log_success("✅ Nueva ventana abierta", paso_actual)
+
+            log("⏳ Esperando que cargue citaconsular.es...")
+            if LOGGER_OK:
+                log_info("⏳ Esperando URL de citaconsular.es...", paso_actual)
+
+            # Esperar INFINITO a que la URL sea citaconsular.es
             while "citaconsular.es" not in pagina.url:
                 time.sleep(1)
+
+            log(f"✅ URL cargada: {pagina.url}")
             if LOGGER_OK:
-                log_success("✅ URL cargada", paso_actual)
+                log_success(f"✅ URL cargada: {pagina.url}", paso_actual)
+
+            # Esperar INFINITO a que aparezca el botón "Aceptar"
+            log("⏳ Esperando alerta de bienvenida...")
+            if LOGGER_OK:
+                log_info("⏳ Esperando alerta...", paso_actual)
+
+            while True:
+                try:
+                    alerta = pagina.wait_for_selector("text=Aceptar", timeout=1000)
+                    alerta.click()
+                    log("✅ Alerta aceptada")
+                    if LOGGER_OK:
+                        log_success("✅ Alerta aceptada", paso_actual)
+                    break
+                except:
+                    time.sleep(1)
+
             paso_actual += 1
             
-            # PASO 5: Continuar
+            # ============================================================
+            # PASO 5: CONTINUAR
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 5: Continuar...", paso_actual)
             try:
@@ -224,7 +252,9 @@ def reservar_cita(cliente):
                         log_warning("⚠️ No se encontró Continuar", paso_actual)
             paso_actual += 1
             
-            # PASO 6: Horarios
+            # ============================================================
+            # PASO 6: HORARIOS
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 6: Horarios...", paso_actual)
             esperar_requirejs(pagina, paso_actual)
@@ -266,7 +296,9 @@ def reservar_cita(cliente):
             horarios[0].click()
             paso_actual += 1
             
-            # PASO 7: Datos
+            # ============================================================
+            # PASO 7: DATOS
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 7: Datos...", paso_actual)
             
@@ -302,7 +334,9 @@ def reservar_cita(cliente):
                     log_success("✅ Contraseña ingresada", paso_actual)
             paso_actual += 1
             
-            # PASO 8: Confirmar
+            # ============================================================
+            # PASO 8: CONFIRMAR
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 8: Confirmar...", paso_actual)
             try:
@@ -325,7 +359,9 @@ def reservar_cita(cliente):
                             log_warning("⚠️ No se encontró Confirmar", paso_actual)
             paso_actual += 1
             
-            # PASO 9: Resultado
+            # ============================================================
+            # PASO 9: RESULTADO
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 9: Resultado...", paso_actual)
             for _ in range(30):
