@@ -85,6 +85,238 @@ def verificar_block_cloudflare(pagina):
         return True
     return False
 
+def aceptar_alerta(pagina, paso=None):
+    """Intenta aceptar la alerta de TODAS las formas posibles"""
+    log("=" * 50)
+    log("🔍 INTENTANDO ACEPTAR ALERTA DE BIENVENIDA")
+    log("=" * 50)
+    if LOGGER_OK:
+        log_info("🔍 Intentando aceptar alerta de bienvenida...", paso)
+    
+    aceptado = False
+    metodos = []
+    
+    # ============================================================
+    # MÉTODO 1: Diálogo de JavaScript (page.on)
+    # ============================================================
+    log("📌 MÉTODO 1: Buscando diálogo de JavaScript (page.on('dialog'))")
+    if LOGGER_OK:
+        log_info("📌 Método 1: page.on('dialog')", paso)
+    
+    def manejar_dialogo(dialog):
+        log(f"   ✅ Diálogo detectado: {dialog.message}")
+        if LOGGER_OK:
+            log_success(f"   ✅ Diálogo detectado: {dialog.message}", paso)
+        dialog.accept()
+        log("   ✅ Alerta aceptada (dialog)")
+        if LOGGER_OK:
+            log_success("   ✅ Alerta aceptada (dialog)", paso)
+        return True
+    
+    pagina.on("dialog", manejar_dialogo)
+    
+    # Esperar un momento
+    time.sleep(2)
+    
+    # ============================================================
+    # MÉTODO 2: Botón HTML con texto "Aceptar"
+    # ============================================================
+    log("📌 MÉTODO 2: Buscando botón HTML con texto 'Aceptar'")
+    if LOGGER_OK:
+        log_info("📌 Método 2: botón con texto 'Aceptar'", paso)
+    
+    try:
+        aceptar = pagina.wait_for_selector("text=Aceptar", timeout=2000)
+        if aceptar:
+            aceptar.click()
+            log("   ✅ Click en botón 'Aceptar' (texto exacto)")
+            if LOGGER_OK:
+                log_success("   ✅ Click en botón 'Aceptar'", paso)
+            aceptado = True
+            metodos.append("Método 2: text=Aceptar")
+    except:
+        log("   ❌ No se encontró 'Aceptar' exacto")
+        if LOGGER_OK:
+            log_warning("   ❌ No se encontró 'Aceptar' exacto", paso)
+    
+    # ============================================================
+    # MÉTODO 3: Botón HTML con texto "Aceptar" (case insensitive)
+    # ============================================================
+    if not aceptado:
+        log("📌 MÉTODO 3: Buscando botón con texto que contenga 'Aceptar' (insensitive)")
+        if LOGGER_OK:
+            log_info("📌 Método 3: botón contiene 'Aceptar'", paso)
+        
+        try:
+            botones = pagina.query_selector_all("button")
+            for boton in botones:
+                texto = boton.text_content()
+                if texto and "aceptar" in texto.lower():
+                    boton.click()
+                    log(f"   ✅ Click en botón: '{texto}'")
+                    if LOGGER_OK:
+                        log_success(f"   ✅ Click en botón: '{texto}'", paso)
+                    aceptado = True
+                    metodos.append(f"Método 3: botón contiene 'Aceptar' - texto: {texto}")
+                    break
+        except Exception as e:
+            log(f"   ❌ Error: {e}")
+    
+    # ============================================================
+    # MÉTODO 4: Botón HTML con texto "Entendido"
+    # ============================================================
+    if not aceptado:
+        log("📌 MÉTODO 4: Buscando botón con texto 'Entendido'")
+        if LOGGER_OK:
+            log_info("📌 Método 4: botón 'Entendido'", paso)
+        
+        try:
+            entendido = pagina.wait_for_selector("text=Entendido", timeout=1000)
+            if entendido:
+                entendido.click()
+                log("   ✅ Click en botón 'Entendido'")
+                if LOGGER_OK:
+                    log_success("   ✅ Click en 'Entendido'", paso)
+                aceptado = True
+                metodos.append("Método 4: text=Entendido")
+        except:
+            log("   ❌ No se encontró 'Entendido'")
+    
+    # ============================================================
+    # MÉTODO 5: Botón HTML con texto "Welcome"
+    # ============================================================
+    if not aceptado:
+        log("📌 MÉTODO 5: Buscando botón con texto 'Welcome'")
+        if LOGGER_OK:
+            log_info("📌 Método 5: botón 'Welcome'", paso)
+        
+        try:
+            welcome = pagina.wait_for_selector("text=Welcome", timeout=1000)
+            if welcome:
+                welcome.click()
+                log("   ✅ Click en botón 'Welcome'")
+                if LOGGER_OK:
+                    log_success("   ✅ Click en 'Welcome'", paso)
+                aceptado = True
+                metodos.append("Método 5: text=Welcome")
+        except:
+            log("   ❌ No se encontró 'Welcome'")
+    
+    # ============================================================
+    # MÉTODO 6: Botón HTML con texto "Bienvenido"
+    # ============================================================
+    if not aceptado:
+        log("📌 MÉTODO 6: Buscando botón con texto 'Bienvenido'")
+        if LOGGER_OK:
+            log_info("📌 Método 6: botón 'Bienvenido'", paso)
+        
+        try:
+            bienvenido = pagina.wait_for_selector("text=Bienvenido", timeout=1000)
+            if bienvenido:
+                bienvenido.click()
+                log("   ✅ Click en botón 'Bienvenido'")
+                if LOGGER_OK:
+                    log_success("   ✅ Click en 'Bienvenido'", paso)
+                aceptado = True
+                metodos.append("Método 6: text=Bienvenido")
+        except:
+            log("   ❌ No se encontró 'Bienvenido'")
+    
+    # ============================================================
+    # MÉTODO 7: Botón con clase "welcome"
+    # ============================================================
+    if not aceptado:
+        log("📌 MÉTODO 7: Buscando botón con clase 'welcome'")
+        if LOGGER_OK:
+            log_info("📌 Método 7: botón con clase 'welcome'", paso)
+        
+        try:
+            welcome_btn = pagina.query_selector("button[class*='welcome']")
+            if welcome_btn:
+                welcome_btn.click()
+                log("   ✅ Click en botón con clase 'welcome'")
+                if LOGGER_OK:
+                    log_success("   ✅ Click en botón con clase 'welcome'", paso)
+                aceptado = True
+                metodos.append("Método 7: button[class*='welcome']")
+        except Exception as e:
+            log(f"   ❌ Error: {e}")
+    
+    # ============================================================
+    # MÉTODO 8: Botón con clase "btn-primary" y texto "Aceptar"
+    # ============================================================
+    if not aceptado:
+        log("📌 MÉTODO 8: Buscando botón con clase 'btn-primary' y texto 'Aceptar'")
+        if LOGGER_OK:
+            log_info("📌 Método 8: btn-primary con 'Aceptar'", paso)
+        
+        try:
+            botones = pagina.query_selector_all("button.btn-primary")
+            for boton in botones:
+                texto = boton.text_content()
+                if texto and ("Aceptar" in texto or "aceptar" in texto.lower()):
+                    boton.click()
+                    log(f"   ✅ Click en botón: '{texto}' (btn-primary)")
+                    if LOGGER_OK:
+                        log_success(f"   ✅ Click en botón: '{texto}'", paso)
+                    aceptado = True
+                    metodos.append(f"Método 8: btn-primary - texto: {texto}")
+                    break
+        except Exception as e:
+            log(f"   ❌ Error: {e}")
+    
+    # ============================================================
+    # MÉTODO 9: Buscar cualquier botón que tenga "Aceptar" en el DOM
+    # ============================================================
+    if not aceptado:
+        log("📌 MÉTODO 9: Buscando ANY botón con 'Aceptar' en el DOM")
+        if LOGGER_OK:
+            log_info("📌 Método 9: ANY botón con 'Aceptar'", paso)
+        
+        try:
+            elementos = pagina.query_selector_all("button, a, input[type='button'], input[type='submit']")
+            for elemento in elementos:
+                texto = elemento.text_content() or elemento.get_attribute("value") or ""
+                if texto and "aceptar" in texto.lower():
+                    elemento.click()
+                    log(f"   ✅ Click en elemento: '{texto}'")
+                    if LOGGER_OK:
+                        log_success(f"   ✅ Click en elemento: '{texto}'", paso)
+                    aceptado = True
+                    metodos.append(f"Método 9: ANY - texto: {texto}")
+                    break
+        except Exception as e:
+            log(f"   ❌ Error: {e}")
+    
+    # ============================================================
+    # MÉTODO 10: Esperar a que la alerta desaparezca sola
+    # ============================================================
+    if not aceptado:
+        log("📌 MÉTODO 10: Esperando a que la alerta desaparezca sola (timeout 10s)")
+        if LOGGER_OK:
+            log_info("📌 Método 10: esperar desaparición", paso)
+        
+        time.sleep(10)
+        log("   ⏳ Espera completada, verificando si hay contenido...")
+    
+    # ============================================================
+    # RESULTADO
+    # ============================================================
+    if aceptado:
+        log("=" * 50)
+        log(f"✅ ALERTA ACEPTADA con: {metodos[0] if metodos else 'desconocido'}")
+        log("=" * 50)
+        if LOGGER_OK:
+            log_success(f"✅ Alerta aceptada con: {metodos[0] if metodos else 'desconocido'}", paso)
+    else:
+        log("=" * 50)
+        log("⚠️ NO SE PUDO ACEPTAR LA ALERTA, continuando...")
+        log("=" * 50)
+        if LOGGER_OK:
+            log_warning("⚠️ No se pudo aceptar alerta, continuando...", paso)
+    
+    return aceptado
+
 def reservar_cita(cliente):
     log(f"🚀 Iniciando reserva para {cliente['nombre']}")
     if LOGGER_OK:
@@ -196,7 +428,7 @@ def reservar_cita(cliente):
             paso_actual += 1
 
             # ============================================================
-            # PASO 4: ESPERAR CARGA DE CITACONSULAR Y MANEJAR ALERTA
+            # PASO 4: ESPERAR CARGA DE CITACONSULAR Y ACEPTAR ALERTA
             # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 4: Esperando carga de citaconsular.es...", paso_actual)
@@ -233,44 +465,14 @@ def reservar_cita(cliente):
                     log_warning("⚠️ Timeout networkidle, continuando...", paso_actual)
 
             # ============================================================
-            # MANEJAR ALERTA DE JAVASCRIPT (dialog)
+            # ACEPTAR ALERTA CON TODOS LOS MÉTODOS POSIBLES
             # ============================================================
-            log("🔍 Esperando alerta de bienvenida (dialog)...")
-            if LOGGER_OK:
-                log_info("🔍 Esperando alerta de bienvenida...", paso_actual)
+            aceptar_alerta(pagina, paso_actual)
 
-            def manejar_dialogo(dialog):
-                log(f"✅ Diálogo detectado: {dialog.message}")
-                if LOGGER_OK:
-                    log_success(f"✅ Diálogo detectado: {dialog.message}", paso_actual)
-                dialog.accept()
-                log("✅ Alerta aceptada")
-                if LOGGER_OK:
-                    log_success("✅ Alerta aceptada", paso_actual)
-
-            pagina.on("dialog", manejar_dialogo)
-
-            log("⏳ Esperando que aparezca la alerta...")
-            if LOGGER_OK:
-                log_info("⏳ Esperando alerta...", paso_actual)
-
-            time.sleep(5)
-
-            try:
-                alerta_html = pagina.wait_for_selector("text=Aceptar", timeout=5000)
-                if alerta_html:
-                    log("✅ Botón 'Aceptar' HTML encontrado!")
-                    alerta_html.click()
-                    log("✅ Alerta HTML aceptada")
-                    if LOGGER_OK:
-                        log_success("✅ Alerta HTML aceptada", paso_actual)
-            except:
-                log("⚠️ No se encontró botón HTML, confiando en el manejador de diálogos...")
-                if LOGGER_OK:
-                    log_warning("⚠️ No se encontró botón HTML, esperando diálogo...", paso_actual)
-
-            time.sleep(3)
-
+            # Esperar un momento después de la alerta
+            time.sleep(2)
+            
+            # Captura de pantalla final del PASO 4
             log("📸 Tomando captura de pantalla del PASO 4...")
             capturar(pagina, "paso_4_ventana_cargada")
             log("✅ Captura guardada: paso_4_ventana_cargada.png")
@@ -278,7 +480,7 @@ def reservar_cita(cliente):
                 log_success("✅ Captura del paso 4 guardada", paso_actual)
 
             log("=" * 50)
-            log("✅ PASO 4 COMPLETADO CON ÉXITO")
+            log("✅ PASO 4 COMPLETADO")
             log("=" * 50)
 
             paso_actual += 1
@@ -288,19 +490,67 @@ def reservar_cita(cliente):
             # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 5: Continuar...", paso_actual)
+            
+            # Intentar varias formas de encontrar "Continuar"
+            log("🔍 Buscando botón Continuar...")
+            continuar_encontrado = False
+            
+            # Forma 1: text=Continuar
             try:
-                esperar_y_clickear(pagina, "text=Continuar", "Continuar", paso_actual)
+                pagina.wait_for_selector("text=Continuar", timeout=5000)
+                pagina.click("text=Continuar")
+                log("✅ Click en Continuar (text=Continuar)")
                 if LOGGER_OK:
                     log_success("✅ Continuar click", paso_actual)
+                continuar_encontrado = True
             except:
+                log("   ❌ No se encontró 'Continuar' exacto")
+            
+            # Forma 2: text=Continue
+            if not continuar_encontrado:
                 try:
-                    esperar_y_clickear(pagina, ".clsDivContinueButton", "Continuar (CSS)", paso_actual)
+                    pagina.wait_for_selector("text=Continue", timeout=3000)
+                    pagina.click("text=Continue")
+                    log("✅ Click en Continuar (text=Continue)")
                     if LOGGER_OK:
-                        log_success("✅ Continuar click", paso_actual)
+                        log_success("✅ Continuar click (Continue)", paso_actual)
+                    continuar_encontrado = True
                 except:
-                    log("⚠️ No se encontró Continuar")
+                    log("   ❌ No se encontró 'Continue'")
+            
+            # Forma 3: clsDivContinueButton
+            if not continuar_encontrado:
+                try:
+                    pagina.wait_for_selector(".clsDivContinueButton", timeout=3000)
+                    pagina.click(".clsDivContinueButton")
+                    log("✅ Click en Continuar (.clsDivContinueButton)")
                     if LOGGER_OK:
-                        log_warning("⚠️ No se encontró Continuar", paso_actual)
+                        log_success("✅ Continuar click (CSS)", paso_actual)
+                    continuar_encontrado = True
+                except:
+                    log("   ❌ No se encontró '.clsDivContinueButton'")
+            
+            # Forma 4: button con texto "Continuar"
+            if not continuar_encontrado:
+                try:
+                    botones = pagina.query_selector_all("button")
+                    for boton in botones:
+                        texto = boton.text_content()
+                        if texto and "continuar" in texto.lower():
+                            boton.click()
+                            log(f"✅ Click en botón: '{texto}'")
+                            if LOGGER_OK:
+                                log_success(f"✅ Click en botón: '{texto}'", paso_actual)
+                            continuar_encontrado = True
+                            break
+                except Exception as e:
+                    log(f"   ❌ Error buscando botones: {e}")
+            
+            if not continuar_encontrado:
+                log("⚠️ No se encontró Continuar en ninguna forma")
+                if LOGGER_OK:
+                    log_warning("⚠️ No se encontró Continuar", paso_actual)
+            
             paso_actual += 1
             
             # ============================================================
