@@ -165,7 +165,6 @@ def reservar_cita(cliente):
 
             try:
                 with navegador.contexts[0].expect_page() as nueva_pagina_info:
-                    # Buscar y hacer clic en el enlace RFX
                     try:
                         enlace = pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=30000)
                         if enlace:
@@ -174,7 +173,6 @@ def reservar_cita(cliente):
                                 log_success("✅ Enlace RFX encontrado", paso_actual)
                             enlace.click()
                     except:
-                        # Intentar por href
                         enlace = pagina.wait_for_selector("a[href*='citaconsular.es']", timeout=30000)
                         if enlace:
                             log("✅ Enlace RFX encontrado por href, haciendo click...")
@@ -182,7 +180,6 @@ def reservar_cita(cliente):
                                 log_success("✅ Enlace RFX encontrado por href", paso_actual)
                             enlace.click()
                 
-                # Obtener la nueva página
                 pagina = nueva_pagina_info.value
                 log("✅ Nueva ventana capturada con expect_page!")
                 if LOGGER_OK:
@@ -199,7 +196,7 @@ def reservar_cita(cliente):
             paso_actual += 1
 
             # ============================================================
-            # PASO 4: ESPERAR CARGA DE CITACONSULAR
+            # PASO 4: ESPERAR CARGA DE CITACONSULAR Y MANEJAR ALERTA
             # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 4: Esperando carga de citaconsular.es...", paso_actual)
@@ -235,34 +232,44 @@ def reservar_cita(cliente):
                 if LOGGER_OK:
                     log_warning("⚠️ Timeout networkidle, continuando...", paso_actual)
 
-            log("🔍 Buscando alerta de bienvenida...")
+            # ============================================================
+            # MANEJAR ALERTA DE JAVASCRIPT (dialog)
+            # ============================================================
+            log("🔍 Esperando alerta de bienvenida (dialog)...")
             if LOGGER_OK:
-                log_info("🔍 Buscando alerta de bienvenida...", paso_actual)
+                log_info("🔍 Esperando alerta de bienvenida...", paso_actual)
 
-            intentos = 0
-            while True:
-                try:
-                    alerta = pagina.wait_for_selector("text=Aceptar", timeout=1000)
-                    if alerta:
-                        log("✅ Botón 'Aceptar' encontrado!")
-                        alerta.click()
-                        log("✅ Alerta aceptada correctamente")
-                        if LOGGER_OK:
-                            log_success("✅ Alerta aceptada", paso_actual)
-                        break
-                except:
-                    intentos += 1
-                    if intentos % 5 == 0:
-                        contenido = pagina.content()
-                        if "No hay" in contenido and "horas" in contenido:
-                            log("   ⚠️ La página dice 'No hay horas disponibles'")
-                            if LOGGER_OK:
-                                log_warning("⚠️ No hay horas disponibles en la página", paso_actual)
-                        else:
-                            log(f"   ⏳ Esperando alerta... ({intentos}s)")
-                            if LOGGER_OK:
-                                log_info(f"⏳ Esperando alerta... ({intentos}s)", paso_actual)
-                    time.sleep(1)
+            def manejar_dialogo(dialog):
+                log(f"✅ Diálogo detectado: {dialog.message}")
+                if LOGGER_OK:
+                    log_success(f"✅ Diálogo detectado: {dialog.message}", paso_actual)
+                dialog.accept()
+                log("✅ Alerta aceptada")
+                if LOGGER_OK:
+                    log_success("✅ Alerta aceptada", paso_actual)
+
+            pagina.on("dialog", manejar_dialogo)
+
+            log("⏳ Esperando que aparezca la alerta...")
+            if LOGGER_OK:
+                log_info("⏳ Esperando alerta...", paso_actual)
+
+            time.sleep(5)
+
+            try:
+                alerta_html = pagina.wait_for_selector("text=Aceptar", timeout=5000)
+                if alerta_html:
+                    log("✅ Botón 'Aceptar' HTML encontrado!")
+                    alerta_html.click()
+                    log("✅ Alerta HTML aceptada")
+                    if LOGGER_OK:
+                        log_success("✅ Alerta HTML aceptada", paso_actual)
+            except:
+                log("⚠️ No se encontró botón HTML, confiando en el manejador de diálogos...")
+                if LOGGER_OK:
+                    log_warning("⚠️ No se encontró botón HTML, esperando diálogo...", paso_actual)
+
+            time.sleep(3)
 
             log("📸 Tomando captura de pantalla del PASO 4...")
             capturar(pagina, "paso_4_ventana_cargada")
