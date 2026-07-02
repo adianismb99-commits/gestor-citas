@@ -91,7 +91,7 @@
             <button onclick="limpiarLogs()" class="btn-danger">🗑️ Limpiar</button>
             <label class="auto-refresh">
                 <input type="checkbox" id="autoRefresh" checked onchange="toggleAutoRefresh()"> 
-                Auto-refresh (10s)
+                Auto-refresh (5s)
             </label>
         </div>
         
@@ -205,7 +205,7 @@
         
         function iniciarAutoRefresh() {
             if (intervalo) clearInterval(intervalo);
-            intervalo = setInterval(cargarLogs, 10000);
+            intervalo = setInterval(cargarLogs, 5000);  // <--- CAMBIADO A 5 SEGUNDOS
         }
         
         document.addEventListener('DOMContentLoaded', function() {
