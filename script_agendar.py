@@ -164,7 +164,7 @@ def reservar_cita(cliente):
                 log_info("⏳ Preparando expect_page...", paso_actual)
 
             try:
-                with navegador.context.expect_page() as nueva_pagina_info:
+                with navegador.contexts[0].expect_page() as nueva_pagina_info:
                     # Buscar y hacer clic en el enlace RFX
                     try:
                         enlace = pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=30000)
