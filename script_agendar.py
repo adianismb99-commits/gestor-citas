@@ -182,7 +182,7 @@ def reservar_cita(cliente):
             
             # Esperar a que se abra nueva página
             time.sleep(3)
-            paginas = navegador.pages  # <--- CORREGIDO
+            paginas = navegador.contexts[0].pages  # <--- CORREGIDO
             if len(paginas) > 1:
                 pagina = paginas[-1]
                 log("✅ Cambiado a nueva ventana")
