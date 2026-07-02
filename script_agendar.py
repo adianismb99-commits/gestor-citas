@@ -85,13 +85,108 @@ def verificar_block_cloudflare(pagina):
         return True
     return False
 
+def diagnosticar_pagina(pagina, paso=None):
+    """Analiza y muestra el contenido de la página para diagnóstico"""
+    log("=" * 60)
+    log("🔍 DIAGNÓSTICO DE PÁGINA")
+    log("=" * 60)
+    if LOGGER_OK:
+        log_info("🔍 Iniciando diagnóstico de página...", paso)
+    
+    # 1. Título
+    try:
+        titulo = pagina.title()
+        log(f"📌 Título: {titulo}")
+        if LOGGER_OK:
+            log_info(f"📌 Título: {titulo}", paso)
+    except:
+        log("⚠️ No se pudo obtener el título")
+    
+    # 2. URL actual
+    log(f"📍 URL: {pagina.url}")
+    
+    # 3. Buscar TODOS los botones
+    botones = pagina.query_selector_all("button")
+    log(f"🔘 Botones encontrados: {len(botones)}")
+    if LOGGER_OK:
+        log_info(f"🔘 Botones: {len(botones)}", paso)
+    
+    if len(botones) > 0:
+        for i, boton in enumerate(botones[:10]):
+            try:
+                texto = boton.text_content() or ""
+                clase = boton.get_attribute("class") or ""
+                id_ = boton.get_attribute("id") or ""
+                log(f"   {i+1}. Texto: '{texto}' | Clase: '{clase}' | ID: '{id_}'")
+            except:
+                pass
+    
+    # 4. Buscar TODOS los inputs
+    inputs = pagina.query_selector_all("input")
+    log(f"📝 Inputs encontrados: {len(inputs)}")
+    if len(inputs) > 0:
+        for i, inp in enumerate(inputs[:5]):
+            try:
+                tipo = inp.get_attribute("type") or ""
+                placeholder = inp.get_attribute("placeholder") or ""
+                log(f"   {i+1}. Type: '{tipo}' | Placeholder: '{placeholder}'")
+            except:
+                pass
+    
+    # 5. Buscar TODOS los enlaces
+    enlaces = pagina.query_selector_all("a")
+    log(f"🔗 Enlaces encontrados: {len(enlaces)}")
+    if len(enlaces) > 0:
+        for i, enl in enumerate(enlaces[:5]):
+            try:
+                texto = enl.text_content() or ""
+                href = enl.get_attribute("href") or ""
+                log(f"   {i+1}. Texto: '{texto[:50]}' | href: '{href[:50]}'")
+            except:
+                pass
+    
+    # 6. Buscar texto específico en la página
+    contenido = pagina.content()
+    textos_buscar = ["Aceptar", "Bienvenido", "Welcome", "Continuar", "Continue", "Confirmar", "No hay", "horas", "disponibles"]
+    log("🔍 Buscando textos clave:")
+    for texto in textos_buscar:
+        if texto in contenido:
+            log(f"   ✅ '{texto}' ENCONTRADO")
+        else:
+            log(f"   ❌ '{texto}' NO encontrado")
+    
+    # 7. Buscar clases comunes del widget
+    clases = ["clsDivContinueButton", "clsDivDatetimeSlot", "clsDivBktAgendaContent", "idDivBktAgendasContainer"]
+    log("🔍 Buscando clases del widget:")
+    for clase in clases:
+        elemento = pagina.query_selector(f".{clase}")
+        if elemento:
+            log(f"   ✅ .{clase} encontrado")
+        else:
+            log(f"   ❌ .{clase} NO encontrado")
+    
+    # 8. Verificar si hay error de carga
+    if "Error" in contenido or "error" in contenido:
+        log("⚠️ Posible error en la página")
+    
+    # 9. Captura de pantalla para diagnóstico
+    capturar(pagina, "diagnostico_pagina")
+    log("📸 Captura de diagnóstico guardada: diagnostico_pagina.png")
+    
+    log("=" * 60)
+    log("✅ DIAGNÓSTICO COMPLETADO")
+    log("=" * 60)
+
 def aceptar_alerta(pagina, paso=None):
-    """Intenta aceptar la alerta de TODAS las formas posibles"""
+    """Intenta aceptar la alerta de TODAS las formas posibles con capturas"""
     log("=" * 50)
     log("🔍 INTENTANDO ACEPTAR ALERTA DE BIENVENIDA")
     log("=" * 50)
     if LOGGER_OK:
         log_info("🔍 Intentando aceptar alerta de bienvenida...", paso)
+    
+    # Primero, hacer diagnóstico completo
+    diagnosticar_pagina(pagina, paso)
     
     aceptado = False
     metodos = []
@@ -117,6 +212,7 @@ def aceptar_alerta(pagina, paso=None):
     
     # Esperar un momento
     time.sleep(2)
+    capturar(pagina, "metodo_1_dialog")
     
     # ============================================================
     # MÉTODO 2: Botón HTML con texto "Aceptar"
@@ -134,10 +230,10 @@ def aceptar_alerta(pagina, paso=None):
                 log_success("   ✅ Click en botón 'Aceptar'", paso)
             aceptado = True
             metodos.append("Método 2: text=Aceptar")
+            capturar(pagina, "metodo_2_aceptar_exacto")
     except:
         log("   ❌ No se encontró 'Aceptar' exacto")
-        if LOGGER_OK:
-            log_warning("   ❌ No se encontró 'Aceptar' exacto", paso)
+        capturar(pagina, "metodo_2_no_aceptar")
     
     # ============================================================
     # MÉTODO 3: Botón HTML con texto "Aceptar" (case insensitive)
@@ -158,9 +254,11 @@ def aceptar_alerta(pagina, paso=None):
                         log_success(f"   ✅ Click en botón: '{texto}'", paso)
                     aceptado = True
                     metodos.append(f"Método 3: botón contiene 'Aceptar' - texto: {texto}")
+                    capturar(pagina, "metodo_3_boton_contiene_aceptar")
                     break
         except Exception as e:
             log(f"   ❌ Error: {e}")
+            capturar(pagina, "metodo_3_error")
     
     # ============================================================
     # MÉTODO 4: Botón HTML con texto "Entendido"
@@ -179,8 +277,10 @@ def aceptar_alerta(pagina, paso=None):
                     log_success("   ✅ Click en 'Entendido'", paso)
                 aceptado = True
                 metodos.append("Método 4: text=Entendido")
+                capturar(pagina, "metodo_4_entendido")
         except:
             log("   ❌ No se encontró 'Entendido'")
+            capturar(pagina, "metodo_4_no_entendido")
     
     # ============================================================
     # MÉTODO 5: Botón HTML con texto "Welcome"
@@ -199,8 +299,10 @@ def aceptar_alerta(pagina, paso=None):
                     log_success("   ✅ Click en 'Welcome'", paso)
                 aceptado = True
                 metodos.append("Método 5: text=Welcome")
+                capturar(pagina, "metodo_5_welcome")
         except:
             log("   ❌ No se encontró 'Welcome'")
+            capturar(pagina, "metodo_5_no_welcome")
     
     # ============================================================
     # MÉTODO 6: Botón HTML con texto "Bienvenido"
@@ -219,8 +321,10 @@ def aceptar_alerta(pagina, paso=None):
                     log_success("   ✅ Click en 'Bienvenido'", paso)
                 aceptado = True
                 metodos.append("Método 6: text=Bienvenido")
+                capturar(pagina, "metodo_6_bienvenido")
         except:
             log("   ❌ No se encontró 'Bienvenido'")
+            capturar(pagina, "metodo_6_no_bienvenido")
     
     # ============================================================
     # MÉTODO 7: Botón con clase "welcome"
@@ -239,8 +343,10 @@ def aceptar_alerta(pagina, paso=None):
                     log_success("   ✅ Click en botón con clase 'welcome'", paso)
                 aceptado = True
                 metodos.append("Método 7: button[class*='welcome']")
+                capturar(pagina, "metodo_7_clase_welcome")
         except Exception as e:
             log(f"   ❌ Error: {e}")
+            capturar(pagina, "metodo_7_error")
     
     # ============================================================
     # MÉTODO 8: Botón con clase "btn-primary" y texto "Aceptar"
@@ -261,9 +367,11 @@ def aceptar_alerta(pagina, paso=None):
                         log_success(f"   ✅ Click en botón: '{texto}'", paso)
                     aceptado = True
                     metodos.append(f"Método 8: btn-primary - texto: {texto}")
+                    capturar(pagina, "metodo_8_btn_primary")
                     break
         except Exception as e:
             log(f"   ❌ Error: {e}")
+            capturar(pagina, "metodo_8_error")
     
     # ============================================================
     # MÉTODO 9: Buscar cualquier botón que tenga "Aceptar" en el DOM
@@ -284,9 +392,11 @@ def aceptar_alerta(pagina, paso=None):
                         log_success(f"   ✅ Click en elemento: '{texto}'", paso)
                     aceptado = True
                     metodos.append(f"Método 9: ANY - texto: {texto}")
+                    capturar(pagina, "metodo_9_any")
                     break
         except Exception as e:
             log(f"   ❌ Error: {e}")
+            capturar(pagina, "metodo_9_error")
     
     # ============================================================
     # MÉTODO 10: Esperar a que la alerta desaparezca sola
@@ -298,6 +408,7 @@ def aceptar_alerta(pagina, paso=None):
         
         time.sleep(10)
         log("   ⏳ Espera completada, verificando si hay contenido...")
+        capturar(pagina, "metodo_10_despues_espera")
     
     # ============================================================
     # RESULTADO
@@ -310,10 +421,15 @@ def aceptar_alerta(pagina, paso=None):
             log_success(f"✅ Alerta aceptada con: {metodos[0] if metodos else 'desconocido'}", paso)
     else:
         log("=" * 50)
-        log("⚠️ NO SE PUDO ACEPTAR LA ALERTA, continuando...")
+        log("⚠️ NO SE PUDO ACEPTAR LA ALERTA")
+        log("📸 Se guardaron capturas de TODOS los métodos en static/")
+        log("🔍 Revisa las capturas para ver qué está pasando")
         log("=" * 50)
         if LOGGER_OK:
-            log_warning("⚠️ No se pudo aceptar alerta, continuando...", paso)
+            log_warning("⚠️ No se pudo aceptar alerta, revisar capturas", paso)
+    
+    # Captura final
+    capturar(pagina, "paso_4_final")
     
     return aceptado
 
@@ -491,11 +607,9 @@ def reservar_cita(cliente):
             if LOGGER_OK:
                 log_info("📌 PASO 5: Continuar...", paso_actual)
             
-            # Intentar varias formas de encontrar "Continuar"
             log("🔍 Buscando botón Continuar...")
             continuar_encontrado = False
             
-            # Forma 1: text=Continuar
             try:
                 pagina.wait_for_selector("text=Continuar", timeout=5000)
                 pagina.click("text=Continuar")
@@ -506,7 +620,6 @@ def reservar_cita(cliente):
             except:
                 log("   ❌ No se encontró 'Continuar' exacto")
             
-            # Forma 2: text=Continue
             if not continuar_encontrado:
                 try:
                     pagina.wait_for_selector("text=Continue", timeout=3000)
@@ -518,7 +631,6 @@ def reservar_cita(cliente):
                 except:
                     log("   ❌ No se encontró 'Continue'")
             
-            # Forma 3: clsDivContinueButton
             if not continuar_encontrado:
                 try:
                     pagina.wait_for_selector(".clsDivContinueButton", timeout=3000)
@@ -530,7 +642,6 @@ def reservar_cita(cliente):
                 except:
                     log("   ❌ No se encontró '.clsDivContinueButton'")
             
-            # Forma 4: button con texto "Continuar"
             if not continuar_encontrado:
                 try:
                     botones = pagina.query_selector_all("button")
@@ -603,10 +714,8 @@ def reservar_cita(cliente):
             if LOGGER_OK:
                 log_info("📌 PASO 7: Datos...", paso_actual)
             
-            # Esperar campos
             time.sleep(3)
             
-            # Buscar pasaporte
             campo_pasaporte = None
             try:
                 campo_pasaporte = pagina.query_selector("input[placeholder='Pasaporte']")
@@ -626,7 +735,6 @@ def reservar_cita(cliente):
                 if LOGGER_OK:
                     log_success("✅ Pasaporte ingresado", paso_actual)
             
-            # Buscar contraseña
             campo_password = pagina.query_selector("input[type='password']")
             if campo_password:
                 campo_password.fill(cliente["contrasena"])
