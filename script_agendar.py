@@ -1,6 +1,7 @@
 import time
 import os
 import sys
+import re
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 
@@ -27,7 +28,8 @@ def capturar(pagina, nombre):
         pagina.screenshot(path=archivo)
         log(f"📸 Captura: {archivo}")
         return archivo
-    except:
+    except Exception as e:
+        log(f"⚠️ Error al capturar {nombre}: {e}")
         return None
 
 def reservar_cita(cliente):
@@ -68,8 +70,8 @@ def reservar_cita(cliente):
             if LOGGER_OK:
                 log_info("📌 PASO 1: Cargando página...", 1)
             
-            url = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
-            pagina.goto(url, timeout=30000)
+            url_origen = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
+            pagina.goto(url_origen, timeout=30000)
             log("⏳ Cargando página...")
             time.sleep(3)
             
@@ -109,48 +111,80 @@ def reservar_cita(cliente):
                     log("⚠️ No se encontraron cookies")
             
             # ============================================================
-            # PASO 3: RFX - FORZAR CLICK CON JAVASCRIPT
+            # PASO 3: RFX - EXTRAER URL Y NAVEGAR CON REFERER
             # ============================================================
             if LOGGER_OK:
-                log_info("📌 PASO 3: RFX (forzando click con JavaScript)...", 3)
+                log_info("📌 PASO 3: RFX (extrayendo URL y navegando con referer)...", 3)
             
-            # Buscar el enlace RFX
+            url_rfx = None
             enlace_href = None
+            
             try:
-                # Intentar con el texto exacto
+                # Buscar el enlace por texto exacto
                 enlace = pagina.query_selector("text=Reservar cita de visados RFX")
-                if enlace:
-                    enlace_href = enlace.get_attribute("href")
-                    log(f"✅ Enlace RFX encontrado (texto exacto): {enlace_href}")
-                    # Forzar click con JavaScript
-                    pagina.evaluate("""
-                        document.querySelector('a[href*="citaconsular.es"]').click();
-                    """)
-                    log("✅ Click forzado con JavaScript en RFX")
-                    if LOGGER_OK:
-                        log_success("✅ RFX clickeado con JavaScript", 3)
-                else:
-                    # Intentar por href
+                if not enlace:
+                    # Buscar por href que contenga citaconsular
                     enlace = pagina.query_selector("a[href*='citaconsular.es']")
-                    if enlace:
-                        enlace_href = enlace.get_attribute("href")
-                        log(f"✅ Enlace RFX encontrado (por href): {enlace_href}")
-                        pagina.evaluate("""
-                            document.querySelector('a[href*="citaconsular.es"]').click();
-                        """)
-                        log("✅ Click forzado con JavaScript en RFX (por href)")
-                        if LOGGER_OK:
-                            log_success("✅ RFX clickeado con JavaScript (por href)", 3)
+                
+                if enlace:
+                    # Intentar obtener el href
+                    href = enlace.get_attribute("href")
+                    if href:
+                        if href.startswith("/"):
+                            url_rfx = "https://www.exteriores.gob.es" + href
+                        else:
+                            url_rfx = href
+                        enlace_href = url_rfx
+                        log(f"✅ URL RFX encontrada (href): {url_rfx}")
                     else:
-                        log("❌ No se encontró RFX")
-                        resultado["motivo"] = "no_rfx"
-                        capturar(pagina, "error_no_rfx")
-                        navegador.close()
-                        return resultado
+                        # Intentar extraer del onclick
+                        onclick = enlace.get_attribute("onclick")
+                        if onclick:
+                            # Buscar location.href
+                            match = re.search(r"location\.href=['\"]([^'\"]+)['\"]", onclick)
+                            if match:
+                                url_rfx = match.group(1)
+                                enlace_href = url_rfx
+                                log(f"✅ URL extraída de onclick: {url_rfx}")
+                            else:
+                                # Buscar window.open
+                                match = re.search(r"window\.open\(['\"]([^'\"]+)['\"]", onclick)
+                                if match:
+                                    url_rfx = match.group(1)
+                                    enlace_href = url_rfx
+                                    log(f"✅ URL extraída de window.open: {url_rfx}")
+                    
+                    if url_rfx:
+                        # Navegar directamente a la URL RFX con el referer correcto
+                        log(f"🔄 Navegando a RFX con referer...")
+                        pagina.goto(
+                            url_rfx,
+                            referer=url_origen,
+                            timeout=30000
+                        )
+                        log("✅ Navegación con referer completada")
+                        if LOGGER_OK:
+                            log_success("✅ Navegación a RFX con referer", 3)
+                    else:
+                        # Si no se pudo extraer la URL, intentar forzar clic
+                        log("⚠️ No se pudo extraer URL, forzando click...")
+                        pagina.evaluate("""
+                            document.querySelector('a[href*="citaconsular.es"]')?.click();
+                        """)
+                        log("✅ Click forzado con JavaScript")
+                        if LOGGER_OK:
+                            log_success("✅ Click forzado en RFX", 3)
+                else:
+                    log("❌ No se encontró RFX")
+                    resultado["motivo"] = "no_rfx"
+                    capturar(pagina, "error_no_rfx")
+                    navegador.close()
+                    return resultado
+                    
             except Exception as e:
-                log(f"❌ Error al forzar click en RFX: {e}")
-                resultado["motivo"] = "rfx_click_error"
-                capturar(pagina, "error_rfx_click")
+                log(f"❌ Error al procesar RFX: {e}")
+                resultado["motivo"] = f"rfx_error: {str(e)[:50]}"
+                capturar(pagina, "error_rfx")
                 navegador.close()
                 return resultado
             
@@ -160,39 +194,35 @@ def reservar_cita(cliente):
             if LOGGER_OK:
                 log_info("📌 PASO 4: Esperando nueva página...", 4)
             
-            # Esperar un momento
+            # Esperar que la página se cargue
             time.sleep(5)
-            
-            # Verificar si la URL cambió
-            if "citaconsular.es" in pagina.url:
-                log(f"✅ La URL cambió a: {pagina.url}")
-                if LOGGER_OK:
-                    log_success(f"✅ URL cambió a citaconsular.es", 4)
-            else:
-                log(f"⚠️ La URL no cambió. URL actual: {pagina.url}")
-                capturar(pagina, "error_url_no_cambio")
-                
-                # Intentar navegar directamente al href
-                if enlace_href and "citaconsular.es" in enlace_href:
-                    log(f"🔄 Navegando directamente a: {enlace_href}")
-                    pagina.goto(enlace_href, timeout=30000)
-                    log(f"✅ Navegación directa completada")
-                    if LOGGER_OK:
-                        log_success("✅ Navegación directa completada", 4)
             
             # Verificar si estamos en citaconsular
             if "citaconsular.es" in pagina.url:
                 log(f"✅ Página final: {pagina.url}")
                 if LOGGER_OK:
-                    log_success(f"✅ Página final: {pagina.url}", 4)
+                    log_success(f"✅ En citaconsular.es", 4)
+                capturar(pagina, "paso_4_citaconsular")
             else:
                 log(f"⚠️ No estamos en citaconsular. URL actual: {pagina.url}")
                 capturar(pagina, "error_url_no_citaconsular")
-                navegador.close()
-                resultado["motivo"] = "no_citaconsular"
-                return resultado
-            
-            capturar(pagina, "paso_4_citaconsular")
+                
+                # Último intento: si tenemos la URL, navegar con más espera
+                if enlace_href and "citaconsular.es" in enlace_href:
+                    log(f"🔄 Último intento: navegando a {enlace_href}")
+                    pagina.goto(enlace_href, referer=url_origen, timeout=30000)
+                    time.sleep(5)
+                    if "citaconsular.es" in pagina.url:
+                        log(f"✅ Éxito en segundo intento: {pagina.url}")
+                        capturar(pagina, "paso_4_citaconsular_segundo_intento")
+                    else:
+                        navegador.close()
+                        resultado["motivo"] = "no_citaconsular"
+                        return resultado
+                else:
+                    navegador.close()
+                    resultado["motivo"] = "no_citaconsular"
+                    return resultado
             
             # ============================================================
             # PASO 5: POPUP DE BIENVENIDA
