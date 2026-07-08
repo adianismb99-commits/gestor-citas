@@ -87,9 +87,10 @@ def reservar_cita(cliente):
             log("⏳ Esperando que cargue la página...")
             time.sleep(10)
             
-            # Verificar Cloudflare
+            # Verificar Cloudflare (SIN await)
             contenido = pagina.content()
-            if "cf-browser-verification" in contenido or "Just a moment" in await pagina.title():
+            titulo = pagina.title()
+            if "cf-browser-verification" in contenido or "Just a moment" in titulo:
                 log("⚠️ Cloudflare detectado, esperando 15 segundos...")
                 time.sleep(15)
                 capturar(pagina, "cloudflare_detectado")
