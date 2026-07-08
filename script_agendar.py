@@ -46,8 +46,11 @@ def reservar_cita(cliente):
     URL_MINISTERIO = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
     
     with sync_playwright() as p:
+        # ============================================================
+        # NAVEGADOR CONFIGURADO PARA RENDER (headless=True)
+        # ============================================================
         navegador = p.chromium.launch(
-            headless=False,  # TEMPORAL: para debug
+            headless=True,  # IMPORTANTE: True para Render
             args=[
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -65,6 +68,7 @@ def reservar_cita(cliente):
         
         pagina = contexto.new_page()
         
+        # Eliminar webdriver
         pagina.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
@@ -95,6 +99,8 @@ def reservar_cita(cliente):
             try:
                 pagina.click("input[value='Aceptar']")
                 log("✅ Cookies aceptadas")
+                if LOGGER_OK:
+                    log_success("✅ Cookies aceptadas", 2)
             except:
                 try:
                     pagina.click("button:has-text('Aceptar')")
@@ -108,6 +114,7 @@ def reservar_cita(cliente):
             if LOGGER_OK:
                 log_info("📌 PASO 3: Haciendo clic en RFX...", 3)
             
+            # Buscar el enlace RFX
             enlace = pagina.query_selector("text=Reservar cita de visados RFX")
             if not enlace:
                 enlace = pagina.query_selector("a[href*='citaconsular.es']")
@@ -120,9 +127,12 @@ def reservar_cita(cliente):
                 return resultado
             
             log("🔄 Haciendo clic en RFX...")
+            
+            # Esperar a que se abra una nueva página
             with contexto.expect_page() as nueva_pagina_info:
                 enlace.click()
             
+            # Cambiar a la nueva página
             pagina = nueva_pagina_info.value
             log("✅ Nueva página abierta")
             pagina.wait_for_load_state("networkidle")
@@ -135,14 +145,15 @@ def reservar_cita(cliente):
             if LOGGER_OK:
                 log_info("📌 PASO 4: Pasando captcha de Cloudflare...", 4)
             
-            # Verificar si estamos en la página de captcha
+            # Verificar si hay captcha
             contenido = pagina.content()
+            
             if "idCaptchaButton" in contenido or "Continue / Continuar" in contenido:
                 log("🔐 CAPTCHA de Cloudflare detectado")
                 capturar(pagina, "captcha_detectado")
                 
-                # Buscar y hacer clic en el botón
                 try:
+                    # Buscar y hacer clic en el botón
                     boton = pagina.query_selector("#idCaptchaButton")
                     if boton:
                         log("🔄 Haciendo clic en 'Continue / Continuar'...")
@@ -176,26 +187,31 @@ def reservar_cita(cliente):
             if LOGGER_OK:
                 log_info("📌 PASO 5: Popup de bienvenida...", 5)
 
+            log("⏳ Esperando popup de bienvenida...")
+            time.sleep(3)
+
             popup_aceptado = False
             for intento in range(5):
+                log(f"   🔄 Intento {intento+1} de 5...")
                 try:
-                    aceptar = pagina.query_selector("text=Aceptar")
-                    if aceptar:
-                        aceptar.click()
-                        log("✅ Popup aceptado")
-                        popup_aceptado = True
-                        break
+                    pagina.click("text=Aceptar")
+                    log("✅ Popup de bienvenida aceptado")
+                    popup_aceptado = True
+                    if LOGGER_OK:
+                        log_success("✅ Popup de bienvenida aceptado", 5)
+                    break
                 except:
                     try:
                         pagina.click("button:has-text('Aceptar')")
-                        log("✅ Popup aceptado")
+                        log("✅ Popup de bienvenida aceptado")
                         popup_aceptado = True
                         break
                     except:
                         time.sleep(2)
 
             if not popup_aceptado:
-                log("⚠️ No se encontró popup")
+                log("⚠️ No se encontró popup de bienvenida, continuando...")
+                capturar(pagina, "error_no_popup")
 
             # ============================================================
             # PASO 6: CONTINUAR
@@ -203,27 +219,32 @@ def reservar_cita(cliente):
             if LOGGER_OK:
                 log_info("📌 PASO 6: Continuar...", 6)
 
+            time.sleep(3)
+
             continuar_encontrado = False
             for intento in range(5):
+                log(f"   🔄 Intentando Continuar {intento+1} de 5...")
                 try:
-                    selectores = [
-                        "text=Continuar",
-                        "text=Continue",
-                        "button:has-text('Continuar')",
-                        ".clsDivContinueButton"
-                    ]
-                    for selector in selectores:
+                    pagina.click("text=Continuar")
+                    log("✅ Click en Continuar")
+                    continuar_encontrado = True
+                    if LOGGER_OK:
+                        log_success("✅ Continuar clickeado", 6)
+                    break
+                except:
+                    try:
+                        pagina.click("text=Continue")
+                        log("✅ Click en Continue")
+                        continuar_encontrado = True
+                        break
+                    except:
                         try:
-                            pagina.click(selector)
-                            log(f"✅ Continuar clickeado ({selector})")
+                            pagina.click(".clsDivContinueButton")
+                            log("✅ Click en Continuar (CSS)")
                             continuar_encontrado = True
                             break
                         except:
-                            continue
-                    if continuar_encontrado:
-                        break
-                except:
-                    time.sleep(2)
+                            time.sleep(2)
 
             if not continuar_encontrado:
                 log("⚠️ No se encontró Continuar")
@@ -247,6 +268,8 @@ def reservar_cita(cliente):
                     resultado["motivo"] = "no_hay_citas"
                     capturar(pagina, "no_hay_citas")
                     navegador.close()
+                    if LOGGER_OK:
+                        finalizar_logs("No hay citas disponibles")
                     return resultado
                 
                 horarios = pagina.query_selector_all(".clsDivDatetimeSlot")
@@ -258,11 +281,15 @@ def reservar_cita(cliente):
             if len(horarios) > 0:
                 log(f"✅ Horarios encontrados: {len(horarios)}")
                 horarios[0].click()
+                if LOGGER_OK:
+                    log_success(f"✅ Horarios encontrados: {len(horarios)}", 7)
             else:
                 log("❌ No hay horarios")
                 resultado["motivo"] = "no_hay_horarios"
                 capturar(pagina, "no_hay_horarios")
                 navegador.close()
+                if LOGGER_OK:
+                    finalizar_logs("No hay horarios")
                 return resultado
             
             # ============================================================
@@ -273,15 +300,27 @@ def reservar_cita(cliente):
             
             time.sleep(2)
             
+            # Pasaporte
             inputs = pagina.query_selector_all("input[type='text']")
             if len(inputs) >= 2:
                 inputs[1].fill(cliente["pasaporte"])
                 log(f"✅ Pasaporte: {cliente['pasaporte']}")
+                if LOGGER_OK:
+                    log_success("✅ Pasaporte ingresado", 8)
+            else:
+                log("⚠️ No se encontró campo de pasaporte")
+                capturar(pagina, "error_no_pasaporte")
             
+            # Contraseña
             password_input = pagina.query_selector("input[type='password']")
             if password_input:
                 password_input.fill(cliente["contrasena"])
                 log("✅ Contraseña ingresada")
+                if LOGGER_OK:
+                    log_success("✅ Contraseña ingresada", 8)
+            else:
+                log("⚠️ No se encontró campo de contraseña")
+                capturar(pagina, "error_no_password")
             
             # ============================================================
             # PASO 9: CONFIRMAR
@@ -291,9 +330,16 @@ def reservar_cita(cliente):
             
             try:
                 pagina.click("text=Confirmar")
-                log("✅ Confirmar clickeado")
+                log("✅ Click en Confirmar")
+                if LOGGER_OK:
+                    log_success("✅ Confirmar clickeado", 9)
             except:
-                log("⚠️ No se encontró Confirmar")
+                try:
+                    pagina.click("button:has-text('Confirmar')")
+                    log("✅ Click en Confirmar (button)")
+                except:
+                    log("⚠️ No se encontró Confirmar")
+                    capturar(pagina, "error_no_confirmar")
             
             time.sleep(2)
             
@@ -309,22 +355,30 @@ def reservar_cita(cliente):
                 resultado["exito"] = True
                 resultado["motivo"] = "cita_confirmada"
                 capturar(pagina, "cita_confirmada")
+                if LOGGER_OK:
+                    log_success("🎉 CITA CONFIRMADA!", 10)
+                    finalizar_logs("¡CITA CONFIRMADA!")
             else:
                 log("❌ No se confirmó")
                 resultado["motivo"] = "no_confirmacion"
                 capturar(pagina, "no_confirmacion")
+                if LOGGER_OK:
+                    log_error("❌ No se confirmó", 10)
+                    finalizar_logs("No se confirmó la cita")
             
             navegador.close()
             return resultado
             
         except Exception as e:
-            log(f"❌ Error: {e}")
+            log(f"❌ Error general: {e}")
             resultado["motivo"] = f"error: {str(e)[:100]}"
             try:
                 capturar(pagina, "error_general")
             except:
                 pass
             navegador.close()
+            if LOGGER_OK:
+                finalizar_logs(f"Error: {str(e)[:100]}")
             return resultado
 
 def reservar_citas_para_usuario(usuario_id):
@@ -343,13 +397,19 @@ def reservar_citas_para_usuario(usuario_id):
         
         if not clientes:
             log("❌ No hay clientes pendientes")
+            if LOGGER_OK:
+                log_warning("❌ No hay clientes pendientes")
             return []
         
         log(f"📋 Clientes a procesar: {len(clientes)}")
+        if LOGGER_OK:
+            log_info(f"📋 Clientes a procesar: {len(clientes)}")
         
         resultados = []
         for cliente in clientes:
             log(f"\n🔄 Procesando: {cliente.nombre}")
+            if LOGGER_OK:
+                log_info(f"🔄 Procesando: {cliente.nombre}")
             
             cliente_dict = {
                 "nombre": cliente.nombre,
@@ -364,13 +424,19 @@ def reservar_citas_para_usuario(usuario_id):
                 cliente.comprobante = resultado.get("captura", "")
                 db.session.commit()
                 log(f"✅ {cliente.nombre} - CITA RESERVADA")
+                if LOGGER_OK:
+                    log_success(f"✅ {cliente.nombre} - CITA RESERVADA")
             else:
                 log(f"❌ {cliente.nombre} - {resultado['motivo']}")
+                if LOGGER_OK:
+                    log_error(f"❌ {cliente.nombre} - {resultado['motivo']}")
             
             resultados.append(resultado)
             time.sleep(5)
         
         log("\n🏁 Proceso completado")
+        if LOGGER_OK:
+            log_success("🏁 Proceso completado")
         return resultados
 
 if __name__ == "__main__":
