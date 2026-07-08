@@ -30,17 +30,6 @@ def capturar(pagina, nombre):
     except:
         return None
 
-def esperar_y_clickear(pagina, selector, nombre="elemento", timeout=15000):
-    log(f"⏳ Esperando: {nombre}...")
-    try:
-        pagina.wait_for_selector(selector, timeout=timeout)
-        pagina.click(selector)
-        log(f"✅ Click: {nombre}")
-        return True
-    except Exception as e:
-        log(f"❌ No se encontró: {nombre} - {e}")
-        return False
-
 def reservar_cita(cliente):
     log(f"🚀 Iniciando reserva para {cliente['nombre']}")
     if LOGGER_OK:
@@ -120,135 +109,76 @@ def reservar_cita(cliente):
                     log("⚠️ No se encontraron cookies")
             
             # ============================================================
-            # PASO 3: RFX
+            # PASO 3: RFX - FORZAR CLICK CON JAVASCRIPT
             # ============================================================
             if LOGGER_OK:
-                log_info("📌 PASO 3: RFX...", 3)
+                log_info("📌 PASO 3: RFX (forzando click con JavaScript)...", 3)
             
+            # Buscar el enlace RFX
             enlace_href = None
-            
             try:
-                pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=15000)
-                enlace_href = pagina.get_attribute("text=Reservar cita de visados RFX", "href")
-                pagina.click("text=Reservar cita de visados RFX")
-                log("✅ RFX encontrado (texto exacto)")
-                if LOGGER_OK:
-                    log_success("✅ RFX encontrado", 3)
-            except:
-                try:
-                    pagina.wait_for_selector("a[href*='citaconsular.es']", timeout=15000)
-                    enlace_href = pagina.get_attribute("a[href*='citaconsular.es']", "href")
-                    pagina.click("a[href*='citaconsular.es']")
-                    log("✅ RFX encontrado (por href)")
+                # Intentar con el texto exacto
+                enlace = pagina.query_selector("text=Reservar cita de visados RFX")
+                if enlace:
+                    enlace_href = enlace.get_attribute("href")
+                    log(f"✅ Enlace RFX encontrado (texto exacto): {enlace_href}")
+                    # Forzar click con JavaScript
+                    pagina.evaluate("""
+                        document.querySelector('a[href*="citaconsular.es"]').click();
+                    """)
+                    log("✅ Click forzado con JavaScript en RFX")
                     if LOGGER_OK:
-                        log_success("✅ RFX encontrado (por href)", 3)
-                except:
-                    log("❌ No se encontró RFX")
-                    resultado["motivo"] = "no_rfx"
-                    capturar(pagina, "error_no_rfx")
-                    navegador.close()
-                    return resultado
-            
-            log(f"📍 URL del enlace RFX: {enlace_href}")
+                        log_success("✅ RFX clickeado con JavaScript", 3)
+                else:
+                    # Intentar por href
+                    enlace = pagina.query_selector("a[href*='citaconsular.es']")
+                    if enlace:
+                        enlace_href = enlace.get_attribute("href")
+                        log(f"✅ Enlace RFX encontrado (por href): {enlace_href}")
+                        pagina.evaluate("""
+                            document.querySelector('a[href*="citaconsular.es"]').click();
+                        """)
+                        log("✅ Click forzado con JavaScript en RFX (por href)")
+                        if LOGGER_OK:
+                            log_success("✅ RFX clickeado con JavaScript (por href)", 3)
+                    else:
+                        log("❌ No se encontró RFX")
+                        resultado["motivo"] = "no_rfx"
+                        capturar(pagina, "error_no_rfx")
+                        navegador.close()
+                        return resultado
+            except Exception as e:
+                log(f"❌ Error al forzar click en RFX: {e}")
+                resultado["motivo"] = "rfx_click_error"
+                capturar(pagina, "error_rfx_click")
+                navegador.close()
+                return resultado
             
             # ============================================================
-            # PASO 4: NUEVA PÁGINA - TODOS LOS MÉTODOS POSIBLES
+            # PASO 4: ESPERAR QUE SE ABRA LA NUEVA PÁGINA
             # ============================================================
             if LOGGER_OK:
-                log_info("📌 PASO 4: Intentando detectar nueva página...", 4)
-            
-            log("=" * 50)
-            log("🔍 MÉTODO 1: navegador.context.pages")
-            log("=" * 50)
+                log_info("📌 PASO 4: Esperando nueva página...", 4)
             
             # Esperar un momento
-            time.sleep(3)
+            time.sleep(5)
             
-            # MÉTODO 1: Obtener todas las páginas del contexto
-            try:
-                paginas = navegador.context.pages
-                log(f"   📄 Páginas en contexto: {len(paginas)}")
-                for i, p in enumerate(paginas):
-                    log(f"      {i+1}. URL: {p.url}")
-                
-                if len(paginas) > 1:
-                    pagina = paginas[-1]
-                    log("✅ Cambiado a la nueva página (Método 1)")
-                    if LOGGER_OK:
-                        log_success("✅ Nueva página detectada (context.pages)", 4)
-                else:
-                    log("⚠️ Solo hay 1 página en el contexto")
-            except Exception as e:
-                log(f"❌ Error en Método 1: {e}")
-            
-            # MÉTODO 2: Esperar a que la URL cambie
-            log("=" * 50)
-            log("🔍 MÉTODO 2: Esperar cambio de URL")
-            log("=" * 50)
-            
-            try:
-                pagina.wait_for_url(lambda url: "citaconsular.es" in url, timeout=5000)
-                log(f"✅ URL cambió a: {pagina.url}")
+            # Verificar si la URL cambió
+            if "citaconsular.es" in pagina.url:
+                log(f"✅ La URL cambió a: {pagina.url}")
                 if LOGGER_OK:
-                    log_success("✅ URL cambió a citaconsular.es", 4)
-            except:
-                log("⚠️ La URL no cambió en 5 segundos")
-                log(f"   URL actual: {pagina.url}")
-            
-            # MÉTODO 3: Usar expect_page() para capturar la nueva página
-            log("=" * 50)
-            log("🔍 MÉTODO 3: expect_page()")
-            log("=" * 50)
-            
-            try:
-                # Crear un nuevo contexto para aislar la nueva página
-                with navegador.context.expect_page() as nueva_pagina_info:
-                    # Reintentar el clic en el enlace RFX
-                    try:
-                        pagina.click("text=Reservar cita de visados RFX")
-                    except:
-                        pagina.click("a[href*='citaconsular.es']")
-                    log("   🔄 Reintentando click en RFX...")
+                    log_success(f"✅ URL cambió a citaconsular.es", 4)
+            else:
+                log(f"⚠️ La URL no cambió. URL actual: {pagina.url}")
+                capturar(pagina, "error_url_no_cambio")
                 
-                nueva_pagina = nueva_pagina_info.value
-                log(f"✅ Nueva página capturada con expect_page: {nueva_pagina.url}")
-                pagina = nueva_pagina
-                if LOGGER_OK:
-                    log_success("✅ Nueva página detectada (expect_page)", 4)
-            except Exception as e:
-                log(f"❌ Error en Método 3: {e}")
-            
-            # MÉTODO 4: Navegar directamente al href
-            log("=" * 50)
-            log("🔍 MÉTODO 4: Navegación directa al href")
-            log("=" * 50)
-            
-            if enlace_href and "citaconsular.es" not in pagina.url:
-                try:
-                    log(f"   Navegando a: {enlace_href}")
+                # Intentar navegar directamente al href
+                if enlace_href and "citaconsular.es" in enlace_href:
+                    log(f"🔄 Navegando directamente a: {enlace_href}")
                     pagina.goto(enlace_href, timeout=30000)
-                    log(f"✅ Navegación directa exitosa: {pagina.url}")
+                    log(f"✅ Navegación directa completada")
                     if LOGGER_OK:
-                        log_success("✅ Navegación directa exitosa", 4)
-                except Exception as e:
-                    log(f"❌ Error en navegación directa: {e}")
-            
-            # MÉTODO 5: Buscar la URL de citaconsular en todas las páginas
-            log("=" * 50)
-            log("🔍 MÉTODO 5: Buscar en todas las páginas")
-            log("=" * 50)
-            
-            try:
-                paginas = navegador.context.pages
-                for i, p in enumerate(paginas):
-                    if "citaconsular.es" in p.url:
-                        pagina = p
-                        log(f"✅ Página de citaconsular encontrada en posición {i+1}: {p.url}")
-                        if LOGGER_OK:
-                            log_success("✅ Página de citaconsular encontrada", 4)
-                        break
-            except Exception as e:
-                log(f"❌ Error en Método 5: {e}")
+                        log_success("✅ Navegación directa completada", 4)
             
             # Verificar si estamos en citaconsular
             if "citaconsular.es" in pagina.url:
@@ -258,6 +188,9 @@ def reservar_cita(cliente):
             else:
                 log(f"⚠️ No estamos en citaconsular. URL actual: {pagina.url}")
                 capturar(pagina, "error_url_no_citaconsular")
+                navegador.close()
+                resultado["motivo"] = "no_citaconsular"
+                return resultado
             
             capturar(pagina, "paso_4_citaconsular")
             
