@@ -30,16 +30,250 @@ def capturar(pagina, nombre):
     except:
         return None
 
-def esperar_y_clickear(pagina, selector, nombre="elemento", timeout=30000):
-    log(f"⏳ Esperando: {nombre}...")
-    try:
-        pagina.wait_for_selector(selector, timeout=timeout)
-        pagina.click(selector)
-        log(f"✅ Click: {nombre}")
-        return True
-    except Exception as e:
-        log(f"❌ No se encontró: {nombre} - {e}")
-        return False
+def aceptar_cookies(pagina, paso=None):
+    """Intenta aceptar cookies de TODAS las formas posibles"""
+    log("🍪 Buscando botón de cookies...")
+    if LOGGER_OK:
+        log_info("🍪 Intentando aceptar cookies...", paso)
+    
+    # Lista de TODOS los selectores posibles para cookies
+    selectores = [
+        # Inputs
+        "input[value='Aceptar']",
+        "input[value='Aceptar cookies']",
+        "input[value='Aceptar todas']",
+        "input[value='Acepto']",
+        "input[value='Entendido']",
+        "input[value='OK']",
+        "input[value='Ok']",
+        "input[value='ok']",
+        "input[type='submit'][value*='Aceptar']",
+        "input[type='submit'][value*='aceptar']",
+        
+        # Botones por texto exacto
+        "button:has-text('Aceptar')",
+        "button:has-text('Aceptar cookies')",
+        "button:has-text('Aceptar todas')",
+        "button:has-text('Aceptar todo')",
+        "button:has-text('Acepto')",
+        "button:has-text('Entendido')",
+        "button:has-text('OK')",
+        "button:has-text('Ok')",
+        "button:has-text('ok')",
+        "button:has-text('Aceptar y cerrar')",
+        "button:has-text('Aceptar y continuar')",
+        "button:has-text('Continuar y aceptar')",
+        
+        # Botones por texto parcial (case insensitive)
+        "button:has-text('Aceptar')",
+        "button:has-text('aceptar')",
+        "button:has-text('Acepto')",
+        "button:has-text('acepto')",
+        "button:has-text('Entendido')",
+        "button:has-text('entendido')",
+        "button:has-text('OK')",
+        "button:has-text('Ok')",
+        "button:has-text('ok')",
+        
+        # Botones por clase
+        ".cookie-accept",
+        ".cookie-accept-button",
+        ".accept-cookies",
+        ".accept-cookies-button",
+        ".btn-accept-cookies",
+        ".cookie-banner button",
+        ".cookie-consent button",
+        ".cookie-notice button",
+        ".cookie-policy button",
+        ".cookies button",
+        ".cookie-accept-btn",
+        ".cookie-accept-button",
+        ".accept-cookie-btn",
+        ".accept-btn",
+        ".btn-accept",
+        ".btn-cookie-accept",
+        ".button-accept",
+        ".button-cookie-accept",
+        "[class*='cookie'] button",
+        "[class*='cookie'] input[type='submit']",
+        "[class*='Cookie'] button",
+        "[class*='Cookie'] input[type='submit']",
+        "[class*='cookie'] [class*='accept']",
+        "[class*='Cookie'] [class*='accept']",
+        
+        # Botones por ID
+        "#cookie-accept",
+        "#accept-cookies",
+        "#acceptCookies",
+        "#cookies-accept",
+        "#cookieAccept",
+        "#cookie_accept",
+        "#acceptCookie",
+        "#btn-accept-cookies",
+        "#btnAcceptCookies",
+        "#cookie-btn-accept",
+        "#cookie-accept-btn",
+        "#cookie-banner-accept",
+        "#cookie-consent-accept",
+        "#cookie-notice-accept",
+        "#cookie-policy-accept",
+        "#cookies-accept-btn",
+        "#cookies-accept-button",
+        
+        # Enlaces
+        "a:has-text('Aceptar')",
+        "a:has-text('Aceptar cookies')",
+        "a:has-text('Aceptar todas')",
+        "a:has-text('Acepto')",
+        "a:has-text('Entendido')",
+        "a:has-text('OK')",
+        "a[href*='accept']",
+        "a[href*='cookie']",
+        
+        # Divs que contienen el botón
+        "div[class*='cookie'] button",
+        "div[class*='Cookie'] button",
+        "div[class*='cookie'] input",
+        "div[class*='Cookie'] input",
+        "div[class*='cookies'] button",
+        "div[class*='Cookies'] button",
+        "div[id*='cookie'] button",
+        "div[id*='Cookie'] button",
+        "div[class*='consent'] button",
+        "div[class*='notice'] button",
+        "div[class*='banner'] button",
+        "div[class*='popup'] button",
+        "div[class*='modal'] button",
+        
+        # Botones en español (variaciones)
+        "button:has-text('Aceptar')",
+        "button:has-text('Aceptar todas las cookies')",
+        "button:has-text('Aceptar solo las necesarias')",
+        "button:has-text('Aceptar cookies técnicas')",
+        "button:has-text('Aceptar y continuar')",
+        "button:has-text('Continuar con cookies')",
+        "button:has-text('Estoy de acuerdo')",
+        "button:has-text('De acuerdo')",
+        "button:has-text('Entendido')",
+        "button:has-text('Vale')",
+        "button:has-text('Vale')",
+        
+        # Botones en inglés
+        "button:has-text('Accept')",
+        "button:has-text('Accept all')",
+        "button:has-text('Accept cookies')",
+        "button:has-text('Accept all cookies')",
+        "button:has-text('Accept and continue')",
+        "button:has-text('I agree')",
+        "button:has-text('Agree')",
+        "button:has-text('Got it')",
+        "button:has-text('Understood')",
+        "button:has-text('OK')",
+        "button:has-text('Ok')",
+        
+        # Botones por atributo data
+        "[data-accept='cookies']",
+        "[data-accept-cookies='true']",
+        "[data-cookie-accept='true']",
+        "[data-cookie-consent='accept']",
+        "[data-cookie-banner='accept']",
+        "[data-cookie-policy='accept']",
+        "[data-cookie-notice='accept']",
+        "[data-cookies-accept='true']",
+        
+        # Botones por role
+        "button[role='button']:has-text('Aceptar')",
+        "button[role='button']:has-text('Accept')",
+        "button[role='button']:has-text('Acepto')",
+        "button[role='button']:has-text('Entendido')",
+        
+        # Cualquier botón que contenga "cookie" en la página
+        "button[class*='cookie']",
+        "button[id*='cookie']",
+        "button[name*='cookie']",
+        "button[title*='cookie']",
+        
+        # Último recurso: cualquier botón visible en la página
+        "button:visible",
+        "input[type='button']:visible",
+        "input[type='submit']:visible"
+    ]
+    
+    cookies_aceptadas = False
+    
+    for selector in selectores:
+        try:
+            # Intentar encontrar el elemento
+            elemento = pagina.wait_for_selector(selector, timeout=2000)
+            if elemento:
+                # Verificar que sea visible y clickeable
+                if elemento.is_visible():
+                    elemento.click()
+                    log(f"✅ Cookies aceptadas con selector: {selector}")
+                    if LOGGER_OK:
+                        log_success(f"✅ Cookies aceptadas", paso)
+                    cookies_aceptadas = True
+                    time.sleep(1)
+                    break
+        except:
+            continue
+    
+    # Si no encontró ningún selector, intentar buscar cualquier botón
+    if not cookies_aceptadas:
+        log("⚠️ No se encontró el botón de cookies con selectores específicos")
+        log("🔍 Buscando cualquier botón que pueda ser de cookies...")
+        if LOGGER_OK:
+            log_warning("⚠️ Buscando cualquier botón de cookies...", paso)
+        
+        try:
+            # Buscar cualquier botón en la página
+            botones = pagina.query_selector_all("button")
+            for boton in botones:
+                texto = boton.text_content() or ""
+                texto_lower = texto.lower()
+                
+                # Palabras clave para identificar botón de cookies
+                palabras = ["aceptar", "acepto", "entendido", "ok", "accept", "agree", "got it", "understood", "cookie", "cookies"]
+                
+                if any(palabra in texto_lower for palabra in palabras):
+                    if boton.is_visible():
+                        boton.click()
+                        log(f"✅ Cookies aceptadas con botón: '{texto}'")
+                        if LOGGER_OK:
+                            log_success(f"✅ Cookies aceptadas: '{texto}'", paso)
+                        cookies_aceptadas = True
+                        break
+        except:
+            pass
+    
+    # Si aún no encontró, buscar inputs
+    if not cookies_aceptadas:
+        try:
+            inputs = pagina.query_selector_all("input[type='button'], input[type='submit']")
+            for inp in inputs:
+                valor = inp.get_attribute("value") or ""
+                texto_lower = valor.lower()
+                
+                palabras = ["aceptar", "acepto", "entendido", "ok", "accept", "agree", "cookie", "cookies"]
+                
+                if any(palabra in texto_lower for palabra in palabras):
+                    if inp.is_visible():
+                        inp.click()
+                        log(f"✅ Cookies aceptadas con input: '{valor}'")
+                        if LOGGER_OK:
+                            log_success(f"✅ Cookies aceptadas: '{valor}'", paso)
+                        cookies_aceptadas = True
+                        break
+        except:
+            pass
+    
+    if not cookies_aceptadas:
+        log("⚠️ NO SE PUDIERON ACEPTAR LAS COOKIES")
+        capturar(pagina, "error_cookies_no_aceptadas")
+        if LOGGER_OK:
+            log_warning("⚠️ No se pudieron aceptar cookies", paso)
+    
+    return cookies_aceptadas
 
 def reservar_cita(cliente):
     log(f"🚀 Iniciando reserva para {cliente['nombre']}")
@@ -54,7 +288,6 @@ def reservar_cita(cliente):
     }
     
     with sync_playwright() as p:
-        # Playwright consume MUCHA MENOS memoria
         navegador = p.chromium.launch(
             headless=True,
             args=[
@@ -71,9 +304,7 @@ def reservar_cita(cliente):
             ]
         )
         pagina = navegador.new_page()
-        
-        # Configurar timeout por defecto
-        pagina.set_default_timeout(30000)
+        pagina.set_default_timeout(15000)
         
         try:
             # ============================================================
@@ -83,57 +314,50 @@ def reservar_cita(cliente):
                 log_info("📌 PASO 1: Cargando página...", 1)
             
             url = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
-            pagina.goto(url, timeout=60000)
-            log("⏳ Esperando que cargue la página...")
-            time.sleep(10)
+            pagina.goto(url, timeout=30000)
+            log("⏳ Cargando página...")
+            time.sleep(3)
             
-            # Verificar Cloudflare (SIN await)
+            # Verificar Cloudflare
             contenido = pagina.content()
             titulo = pagina.title()
             if "cf-browser-verification" in contenido or "Just a moment" in titulo:
-                log("⚠️ Cloudflare detectado, esperando 15 segundos...")
-                time.sleep(15)
+                log("⚠️ Cloudflare detectado, esperando 3 segundos...")
+                time.sleep(3)
                 capturar(pagina, "cloudflare_detectado")
             
-            # Esperar texto
             try:
-                pagina.wait_for_selector("text=Servicios consulares", timeout=30000)
+                pagina.wait_for_selector("text=Servicios consulares", timeout=10000)
                 log("✅ Página cargada")
                 if LOGGER_OK:
                     log_success("✅ Página cargada", 1)
             except:
-                log("⚠️ No se encontró texto 'Servicios consulares', continuando...")
+                log("⚠️ No se encontró texto, continuando...")
                 capturar(pagina, "error_no_texto")
             
-            # PASO 2: COOKIES
+            # ============================================================
+            # PASO 2: COOKIES (CON TODAS LAS OPCIONES)
+            # ============================================================
             if LOGGER_OK:
-                log_info("📌 PASO 2: Cookies...", 2)
+                log_info("📌 PASO 2: Aceptando cookies...", 2)
             
-            try:
-                pagina.click("input[value='Aceptar']")
-                log("✅ Cookies aceptadas")
-                if LOGGER_OK:
-                    log_success("✅ Cookies aceptadas", 2)
-            except:
-                try:
-                    pagina.click("button:has-text('Aceptar')")
-                    log("✅ Cookies aceptadas")
-                except:
-                    log("⚠️ No se encontraron cookies")
+            aceptar_cookies(pagina, 2)
             
+            # ============================================================
             # PASO 3: RFX
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 3: RFX...", 3)
             
             try:
-                pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=30000)
+                pagina.wait_for_selector("text=Reservar cita de visados RFX", timeout=15000)
                 pagina.click("text=Reservar cita de visados RFX")
                 log("✅ RFX encontrado")
                 if LOGGER_OK:
                     log_success("✅ RFX encontrado", 3)
             except:
                 try:
-                    pagina.wait_for_selector("a[href*='citaconsular.es']", timeout=30000)
+                    pagina.wait_for_selector("a[href*='citaconsular.es']", timeout=15000)
                     pagina.click("a[href*='citaconsular.es']")
                     log("✅ RFX encontrado (por href)")
                     if LOGGER_OK:
@@ -145,13 +369,14 @@ def reservar_cita(cliente):
                     navegador.close()
                     return resultado
             
+            # ============================================================
             # PASO 4: NUEVA VENTANA
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 4: Esperando nueva ventana...", 4)
             
-            time.sleep(5)
+            time.sleep(2)
             
-            # Obtener todas las páginas
             paginas = navegador.context.pages
             if len(paginas) > 1:
                 pagina = paginas[-1]
@@ -161,9 +386,8 @@ def reservar_cita(cliente):
             else:
                 log("⚠️ No se abrió nueva ventana, continuando...")
             
-            # Esperar URL de citaconsular
             log("⏳ Esperando citaconsular.es...")
-            timeout = 60
+            timeout = 20
             while "citaconsular.es" not in pagina.url and timeout > 0:
                 time.sleep(1)
                 timeout -= 1
@@ -178,16 +402,18 @@ def reservar_cita(cliente):
             
             capturar(pagina, "paso_4_citaconsular")
             
+            # ============================================================
             # PASO 5: POPUP DE BIENVENIDA
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 5: Aceptando popup de bienvenida...", 5)
 
             log("⏳ Esperando popup de bienvenida...")
-            time.sleep(10)
+            time.sleep(2)
 
             popup_aceptado = False
-            for intento in range(5):
-                log(f"   🔄 Intento {intento+1} de 5...")
+            for intento in range(3):
+                log(f"   🔄 Intento {intento+1} de 3...")
                 try:
                     pagina.click("text=Aceptar")
                     log("✅ Popup de bienvenida aceptado")
@@ -202,22 +428,23 @@ def reservar_cita(cliente):
                         popup_aceptado = True
                         break
                     except:
-                        time.sleep(5)
+                        time.sleep(2)
 
             if not popup_aceptado:
                 log("⚠️ No se encontró popup de bienvenida, continuando...")
                 capturar(pagina, "error_no_popup")
 
+            # ============================================================
             # PASO 6: CONTINUAR
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 6: Continuar...", 6)
 
-            log("⏳ Esperando 10 segundos...")
-            time.sleep(10)
+            time.sleep(2)
 
             continuar_encontrado = False
-            for intento in range(5):
-                log(f"   🔄 Intentando Continuar {intento+1} de 5...")
+            for intento in range(3):
+                log(f"   🔄 Intentando Continuar {intento+1} de 3...")
                 try:
                     pagina.click("text=Continuar")
                     log("✅ Click en Continuar")
@@ -238,20 +465,22 @@ def reservar_cita(cliente):
                             continuar_encontrado = True
                             break
                         except:
-                            time.sleep(5)
+                            time.sleep(2)
 
             if not continuar_encontrado:
                 log("⚠️ No se encontró Continuar")
                 capturar(pagina, "error_no_continuar")
 
+            # ============================================================
             # PASO 7: HORARIOS
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 7: Horarios...", 7)
             
-            time.sleep(10)
+            time.sleep(3)
             
             log("⏳ Esperando horarios...")
-            timeout = 60
+            timeout = 30
             horarios = []
             while timeout > 0:
                 contenido = pagina.content()
@@ -284,11 +513,13 @@ def reservar_cita(cliente):
                     finalizar_logs("No hay horarios")
                 return resultado
             
+            # ============================================================
             # PASO 8: DATOS
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 8: Datos...", 8)
             
-            time.sleep(5)
+            time.sleep(2)
             
             # Pasaporte
             inputs = pagina.query_selector_all("input[type='text']")
@@ -312,7 +543,9 @@ def reservar_cita(cliente):
                 log("⚠️ No se encontró campo de contraseña")
                 capturar(pagina, "error_no_password")
             
+            # ============================================================
             # PASO 9: CONFIRMAR
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 9: Confirmar...", 9)
             
@@ -329,9 +562,11 @@ def reservar_cita(cliente):
                     log("⚠️ No se encontró Confirmar")
                     capturar(pagina, "error_no_confirmar")
             
-            time.sleep(3)
+            time.sleep(2)
             
+            # ============================================================
             # PASO 10: RESULTADO
+            # ============================================================
             if LOGGER_OK:
                 log_info("📌 PASO 10: Resultado...", 10)
             
