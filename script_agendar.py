@@ -28,9 +28,10 @@ def capturar(driver, nombre):
         archivo = f"static/{nombre}.png"
         os.makedirs("static", exist_ok=True)
         driver.save_screenshot(archivo)
-        log(f"📸 Captura: {archivo}")
+        log(f"📸 Captura guardada: {archivo}")
         return archivo
-    except:
+    except Exception as e:
+        log(f"⚠️ Error al guardar captura: {e}")
         return None
 
 def esperar_y_clickear(driver, by, selector, nombre="elemento", timeout=30):
@@ -42,8 +43,9 @@ def esperar_y_clickear(driver, by, selector, nombre="elemento", timeout=30):
         elemento.click()
         log(f"✅ Click: {nombre}")
         return True
-    except:
-        log(f"❌ No se encontró: {nombre}")
+    except Exception as e:
+        log(f"❌ No se encontró: {nombre} - {e}")
+        capturar(driver, f"error_{nombre.replace(' ', '_')}")
         return False
 
 def reservar_cita(cliente):
@@ -59,7 +61,7 @@ def reservar_cita(cliente):
     }
     
     # ============================================================
-    # CONFIGURAR UNDETECTED-CHROMEDRIVER CON OPTIMIZACIONES
+    # CONFIGURAR UNDETECTED-CHROMEDRIVER
     # ============================================================
     log("📌 Configurando undetected-chromedriver...")
     if LOGGER_OK:
@@ -131,7 +133,7 @@ def reservar_cita(cliente):
         url = "https://www.exteriores.gob.es/es/ServiciosAlCiudadano/Paginas/Servicios-consulares.aspx?scco=Cuba&scd=166&scca=Visados&scs=Visados+Nacionales+-+Visado+de+residencia+de+familiares+de+personas+de+nacionalidad+espa%C3%B1ola"
         driver.get(url)
         log("⏳ Esperando que cargue la página...")
-        time.sleep(5)
+        time.sleep(10)
         
         # Esperar a que cargue
         try:
@@ -143,14 +145,17 @@ def reservar_cita(cliente):
                 log_success("✅ Página cargada", 1)
         except:
             log("⚠️ Timeout esperando página, continuando...")
+            capturar(driver, "error_timeout_pagina")
         
         # Verificar Cloudflare
         if "cf-browser-verification" in driver.page_source or "Just a moment" in driver.title:
-            log("⚠️ Cloudflare detectado, esperando 10 segundos...")
-            time.sleep(10)
+            log("⚠️ Cloudflare detectado, esperando 15 segundos...")
+            time.sleep(15)
             capturar(driver, "cloudflare_detectado")
         
+        # ============================================================
         # PASO 2: COOKIES
+        # ============================================================
         if LOGGER_OK:
             log_info("📌 PASO 2: Cookies...", 2)
         
@@ -167,10 +172,13 @@ def reservar_cita(cliente):
                 cookie_btn = driver.find_element(By.XPATH, "//button[contains(text(), 'Aceptar')]")
                 cookie_btn.click()
                 log("✅ Cookies aceptadas")
-            except:
-                log("⚠️ No se encontraron cookies")
+            except Exception as e:
+                log(f"⚠️ No se encontraron cookies: {e}")
+                capturar(driver, "error_cookies")
         
+        # ============================================================
         # PASO 3: RFX
+        # ============================================================
         if LOGGER_OK:
             log_info("📌 PASO 3: RFX...", 3)
         
@@ -184,8 +192,9 @@ def reservar_cita(cliente):
             try:
                 enlace_rfx = driver.find_element(By.XPATH, "//a[contains(@href, 'citaconsular.es')]")
                 log("✅ RFX encontrado (por href)")
-            except:
-                log("❌ No se encontró RFX")
+            except Exception as e:
+                log(f"❌ No se encontró RFX: {e}")
+                capturar(driver, "error_rfx")
         
         if enlace_rfx:
             enlace_rfx.click()
@@ -195,10 +204,13 @@ def reservar_cita(cliente):
         else:
             log("❌ No se encontró RFX")
             resultado["motivo"] = "no_rfx"
+            capturar(driver, "error_no_rfx")
             driver.quit()
             return resultado
         
+        # ============================================================
         # PASO 4: NUEVA VENTANA
+        # ============================================================
         if LOGGER_OK:
             log_info("📌 PASO 4: Esperando nueva ventana...", 4)
         
@@ -211,6 +223,7 @@ def reservar_cita(cliente):
                 log_success("✅ Nueva ventana abierta", 4)
         else:
             log("⚠️ No se abrió nueva ventana, continuando...")
+            capturar(driver, "error_no_nueva_ventana")
         
         # Esperar URL de citaconsular
         log("⏳ Esperando citaconsular.es...")
@@ -219,47 +232,109 @@ def reservar_cita(cliente):
             time.sleep(1)
             timeout -= 1
         
-        log(f"✅ URL: {driver.current_url}")
-        if LOGGER_OK:
-            log_success(f"✅ URL: {driver.current_url}", 4)
+        if "citaconsular.es" in driver.current_url:
+            log(f"✅ URL: {driver.current_url}")
+            if LOGGER_OK:
+                log_success(f"✅ URL: {driver.current_url}", 4)
+        else:
+            log(f"⚠️ No se cargó citaconsular.es, URL actual: {driver.current_url}")
+            capturar(driver, "error_url_no_citaconsular")
         
         capturar(driver, "paso_4_citaconsular")
         
         # ============================================================
-        # PASO 5: ACEPTAR POPUP DE BIENVENIDA
+        # PASO 5: ACEPTAR POPUP DE BIENVENIDA (CON ESPERA EXTRA)
         # ============================================================
         if LOGGER_OK:
             log_info("📌 PASO 5: Aceptando popup de bienvenida...", 5)
-        
+
         log("⏳ Esperando popup de bienvenida...")
-        
-        try:
-            aceptar_btn = WebDriverWait(driver, 30).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Aceptar')]"))
-            )
-            aceptar_btn.click()
-            log("✅ Popup de bienvenida aceptado")
+        log("⏳ Esperando 10 segundos para que Cloudflare se resuelva...")
+        time.sleep(10)
+
+        # Intentar varias veces
+        intentos_popup = 0
+        popup_aceptado = False
+
+        while intentos_popup < 5 and not popup_aceptado:
+            intentos_popup += 1
+            log(f"   🔄 Intento {intentos_popup} de 5...")
+            
+            try:
+                # Buscar cualquier botón que pueda ser "Aceptar"
+                botones = driver.find_elements(By.XPATH, "//button[contains(text(), 'Aceptar')]")
+                if len(botones) > 0:
+                    botones[0].click()
+                    log("✅ Popup de bienvenida aceptado")
+                    popup_aceptado = True
+                    if LOGGER_OK:
+                        log_success("✅ Popup de bienvenida aceptado", 5)
+                    break
+                
+                # Si no hay botones, esperar
+                time.sleep(5)
+            except Exception as e:
+                log(f"   ⚠️ Error en intento {intentos_popup}: {e}")
+                capturar(driver, f"error_popup_intento_{intentos_popup}")
+                time.sleep(5)
+
+        if not popup_aceptado:
+            log("⚠️ No se encontró popup de bienvenida, continuando...")
+            capturar(driver, "error_no_popup")
             if LOGGER_OK:
-                log_success("✅ Popup de bienvenida aceptado", 5)
-        except:
-            log("⚠️ No se encontró popup de bienvenida")
-        
+                log_warning("⚠️ No se encontró popup de bienvenida", 5)
+
         # ============================================================
-        # PASO 6: CONTINUAR
+        # PASO 6: CONTINUAR (CON ESPERA EXTRA)
         # ============================================================
         if LOGGER_OK:
             log_info("📌 PASO 6: Continuar...", 6)
-        
-        try:
-            continuar_btn = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Continuar')]"))
-            )
-            continuar_btn.click()
-            log("✅ Click en Continuar")
-            if LOGGER_OK:
-                log_success("✅ Continuar clickeado", 6)
-        except:
+
+        log("⏳ Esperando 10 segundos para que cargue la página...")
+        time.sleep(10)
+
+        intentos_continuar = 0
+        continuar_encontrado = False
+
+        while intentos_continuar < 5 and not continuar_encontrado:
+            intentos_continuar += 1
+            log(f"   🔄 Intentando Continuar {intentos_continuar} de 5...")
+            
+            try:
+                # Buscar el botón Continuar de varias formas
+                continuar_btn = driver.find_element(By.XPATH, "//button[contains(text(), 'Continuar')]")
+                continuar_btn.click()
+                log("✅ Click en Continuar")
+                continuar_encontrado = True
+                if LOGGER_OK:
+                    log_success("✅ Continuar clickeado", 6)
+                break
+            except:
+                try:
+                    continuar_btn = driver.find_element(By.XPATH, "//button[contains(text(), 'Continue')]")
+                    continuar_btn.click()
+                    log("✅ Click en Continue")
+                    continuar_encontrado = True
+                    break
+                except:
+                    try:
+                        continuar_btn = driver.find_element(By.CSS_SELECTOR, ".clsDivContinueButton")
+                        continuar_btn.click()
+                        log("✅ Click en Continuar (CSS)")
+                        continuar_encontrado = True
+                        break
+                    except:
+                        pass
+            
+            # Si no encuentra, esperar y tomar captura
+            capturar(driver, f"continuar_intento_{intentos_continuar}")
+            time.sleep(5)
+
+        if not continuar_encontrado:
             log("⚠️ No se encontró Continuar")
+            capturar(driver, "error_no_continuar")
+            if LOGGER_OK:
+                log_warning("⚠️ No se encontró Continuar", 6)
         
         # ============================================================
         # PASO 7: HORARIOS
@@ -267,7 +342,7 @@ def reservar_cita(cliente):
         if LOGGER_OK:
             log_info("📌 PASO 7: Horarios...", 7)
         
-        time.sleep(5)
+        time.sleep(10)
         
         # Esperar a que carguen los horarios
         log("⏳ Esperando horarios...")
@@ -309,7 +384,7 @@ def reservar_cita(cliente):
         if LOGGER_OK:
             log_info("📌 PASO 8: Datos...", 8)
         
-        time.sleep(3)
+        time.sleep(5)
         
         # Pasaporte
         inputs = driver.find_elements(By.XPATH, "//input[@type='text']")
@@ -320,6 +395,7 @@ def reservar_cita(cliente):
                 log_success("✅ Pasaporte ingresado", 8)
         else:
             log("⚠️ No se encontró campo de pasaporte")
+            capturar(driver, "error_no_pasaporte")
         
         # Contraseña
         try:
@@ -330,6 +406,7 @@ def reservar_cita(cliente):
                 log_success("✅ Contraseña ingresada", 8)
         except:
             log("⚠️ No se encontró campo de contraseña")
+            capturar(driver, "error_no_password")
         
         # ============================================================
         # PASO 9: CONFIRMAR
@@ -345,6 +422,7 @@ def reservar_cita(cliente):
                 log_success("✅ Confirmar clickeado", 9)
         except:
             log("⚠️ No se encontró Confirmar")
+            capturar(driver, "error_no_confirmar")
         
         time.sleep(3)
         
@@ -374,10 +452,10 @@ def reservar_cita(cliente):
         return resultado
         
     except Exception as e:
-        log(f"❌ Error: {e}")
+        log(f"❌ Error general: {e}")
         resultado["motivo"] = f"error: {str(e)[:100]}"
         try:
-            capturar(driver, "error")
+            capturar(driver, "error_general")
         except:
             pass
         driver.quit()
