@@ -5,3 +5,5 @@ gunicorn
 python-dotenv
 bcrypt
 playwright
+requests
+2captcha-python

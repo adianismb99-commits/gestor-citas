@@ -140,35 +140,72 @@ def reservar_cita(cliente):
             capturar(pagina, "paso_3_citaconsular_inicial")
             
             # ============================================================
-            # PASO 4: PASAR EL CAPTCHA DE CLOUDFLARE
+            # PASO 4: PASAR EL CAPTCHA DE CLOUDFLARE CON 2CAPTCHA
             # ============================================================
             if LOGGER_OK:
-                log_info("📌 PASO 4: Pasando captcha de Cloudflare...", 4)
+                log_info("📌 PASO 4: Pasando captcha de Cloudflare con 2Captcha...", 4)
             
             # Verificar si hay captcha
             contenido = pagina.content()
             
-            if "idCaptchaButton" in contenido or "Continue / Continuar" in contenido:
+            # Detectar captcha por diferentes formas
+            es_captcha = (
+                "idCaptchaButton" in contenido or 
+                "Continue / Continuar" in contenido or
+                "Verificación de seguridad" in contenido or
+                "cf-browser-verification" in contenido or
+                "cf-challenge" in contenido or
+                "Security Check" in contenido
+            )
+            
+            if es_captcha:
                 log("🔐 CAPTCHA de Cloudflare detectado")
                 capturar(pagina, "captcha_detectado")
                 
                 try:
-                    # Buscar y hacer clic en el botón
-                    boton = pagina.query_selector("#idCaptchaButton")
-                    if boton:
-                        log("🔄 Haciendo clic en 'Continue / Continuar'...")
-                        boton.click()
-                        log("✅ Click en botón de captcha")
-                        time.sleep(5)
+                    # IMPORTAR EL SOLVER
+                    from captcha_solver import resolver_captcha_en_pagina
+                    
+                    log("🔄 Resolviendo captcha con 2Captcha...")
+                    
+                    # Resolver el captcha
+                    resultado_captcha = resolver_captcha_en_pagina(pagina, pagina.url)
+                    
+                    if resultado_captcha:
+                        log("✅ Captcha resuelto correctamente")
                         
                         # Esperar redirección
+                        time.sleep(5)
                         pagina.wait_for_load_state("networkidle")
                         log("✅ Redirección completada")
                         capturar(pagina, "despues_captcha")
                     else:
-                        log("⚠️ No se encontró el botón del captcha")
+                        log("❌ No se pudo resolver el captcha")
+                        # Fallback: intentar clic manual
+                        try:
+                            boton = pagina.query_selector("#idCaptchaButton")
+                            if boton:
+                                boton.click()
+                                log("🔄 Click manual en botón (fallback)")
+                                time.sleep(5)
+                        except:
+                            pass
+                        
+                except ImportError as e:
+                    log(f"⚠️ Error importando captcha_solver: {e}")
+                    log("🔄 Usando método manual (fallback)...")
+                    try:
+                        boton = pagina.query_selector("#idCaptchaButton")
+                        if boton:
+                            boton.click()
+                            log("✅ Click en botón de captcha (fallback)")
+                            time.sleep(5)
+                            pagina.wait_for_load_state("networkidle")
+                    except Exception as e2:
+                        log(f"❌ Error en fallback: {e2}")
+                        
                 except Exception as e:
-                    log(f"❌ Error al hacer clic en captcha: {e}")
+                    log(f"❌ Error al resolver captcha con 2Captcha: {e}")
             else:
                 log("ℹ️ No se detectó captcha, continuando...")
             
